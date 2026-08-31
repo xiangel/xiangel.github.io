@@ -6,23 +6,20 @@ import IconArrowRight from "@/assets/icons/IconArrowRight.svg";
 import Layout from "@/layouts/Layout.astro";
 import Header from "@/components/Header.astro";
 import Footer from "@/components/Footer.astro";
-import Socials from "@/components/Socials.astro";
-import Card from "@/components/Card.astro";
 import LinkButton from "@/components/LinkButton.astro";
 import { getSortedPosts } from "@/utils/getSortedPosts";
+import { getPostUrl } from "@/utils/getPostPaths";
 import { useTranslations } from "@/i18n";
 import config from "@/config";
-
-const { socials, posts: postsConfig } = config;
+import dayjs from "dayjs";
 
 const locale = Astro.currentLocale ?? config.site.lang;
 const t = useTranslations(locale);
 
 const posts = await getCollection("posts");
-const sortedPosts = getSortedPosts(posts);
-const featuredPosts = sortedPosts.filter(({ data }) => data.featured);
-const recentPosts = sortedPosts.filter(({ data }) => !data.featured);
+const sortedPosts = getSortedPosts(posts).slice(0, config.posts.perIndex);
 const homePath = getRelativeLocaleUrl(locale, "");
+const githubUrl = config.socials.find(s => s.name === "github")?.url;
 ---
 
 <Layout>
@@ -31,104 +28,334 @@ const homePath = getRelativeLocaleUrl(locale, "");
     id="main-content"
     data-layout="index"
     data-home-path={homePath}
-    class="app-layout my-1"
+    class="app-layout py-8 sm:py-12"
   >
-    <section id="hero" class="border-border border-b pt-8 pb-6">
-      <h1 class="my-4 inline-block text-3xl font-bold sm:my-6 sm:text-4xl">
-        {config.site.title}
-      </h1>
-      <a
-        target="_blank"
-        href={`${import.meta.env.BASE_URL.replace(/\/?$/, "/")}rss.xml`}
-        class="inline-block"
-        aria-label="RSS Feed"
-        title="RSS Feed"
-      >
-        <IconRss
-          width={20}
-          height={20}
-          class="stroke-accent scale-125 stroke-3 rtl:-rotate-90"
-        />
-        <span class="sr-only">RSS Feed</span>
-      </a>
-
-      <p class="text-muted-foreground max-w-2xl text-base leading-relaxed sm:text-lg">
-        {config.site.description}
-      </p>
-      <p class="text-muted-foreground mt-2 max-w-2xl text-sm leading-relaxed">
-        记录技术学习、项目实践与日常思考。欢迎阅读
-        <LinkButton
-          class="hover:text-accent underline decoration-dashed underline-offset-4"
-          href={getRelativeLocaleUrl(locale, "posts")}
-        >
-          全部文章
-        </LinkButton>
-        ，或在
-        <LinkButton
-          class="hover:text-accent underline decoration-dashed underline-offset-4"
-          href={getRelativeLocaleUrl(locale, "about")}
-        >
-          关于
-        </LinkButton>
-        页面了解更多。
-      </p>
-      {
-        socials.length > 0 && (
-          <div class="mt-4 flex max-sm:flex-col sm:items-center">
-            <div class="me-2 mb-1 whitespace-nowrap sm:mb-0">
-              {t.home.socialLinks}:
-            </div>
-            <Socials />
-          </div>
-        )
-      }
+    <section class="home-hero">
+      <div class="home-hero__avatar" aria-hidden="true">
+        {config.site.author.slice(0, 1).toUpperCase()}
+      </div>
+      <div class="home-hero__content">
+        <p class="home-hero__eyebrow">Welcome</p>
+        <h1 class="home-hero__title">{config.site.author}</h1>
+        <p class="home-hero__desc">{config.site.description}</p>
+        <div class="home-hero__actions">
+          {
+            githubUrl && (
+              <a
+                href={githubUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="home-hero__btn home-hero__btn--primary"
+              >
+                GitHub
+              </a>
+            )
+          }
+          <a
+            href={getRelativeLocaleUrl(locale, "about")}
+            class="home-hero__btn home-hero__btn--ghost"
+          >
+            关于我
+          </a>
+          <a
+            href={`${import.meta.env.BASE_URL.replace(/\/?$/, "/")}rss.xml`}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="home-hero__btn home-hero__btn--ghost"
+            aria-label="RSS Feed"
+          >
+            <IconRss width={16} height={16} class="stroke-current" />
+            RSS
+          </a>
+        </div>
+      </div>
     </section>
 
-    {
-      featuredPosts.length > 0 && (
-        <section
-          id="featured"
-          class:list={[
-            "pt-12 pb-6",
-            { "border-border border-b": recentPosts.length > 0 },
-          ]}
-        >
-          <h2 class="text-2xl font-semibold tracking-wide">
-            {t.home.featured}
-          </h2>
-          <ul>
-            {featuredPosts.map(data => (
-              <Card variant="h3" {...data} />
+    <section class="home-posts">
+      <div class="home-posts__header">
+        <h2 class="home-posts__title">最新文章</h2>
+        <span class="home-posts__count">{sortedPosts.length} 篇</span>
+      </div>
+
+      {
+        sortedPosts.length > 0 ? (
+          <ul class="home-posts__list">
+            {sortedPosts.map(post => (
+              <li class="home-post-card">
+                <a
+                  href={getPostUrl(post.id, post.filePath, locale)}
+                  class="home-post-card__link"
+                >
+                  <time
+                    class="home-post-card__date"
+                    datetime={dayjs(post.data.pubDatetime).toISOString()}
+                  >
+                    {dayjs(post.data.pubDatetime).format("YYYY-MM-DD")}
+                  </time>
+                  <div class="home-post-card__body">
+                    <h3 class="home-post-card__title">{post.data.title}</h3>
+                    <p class="home-post-card__desc">{post.data.description}</p>
+                  </div>
+                  <IconArrowRight
+                    class="home-post-card__arrow rtl:-rotate-180"
+                    width={18}
+                    height={18}
+                  />
+                </a>
+              </li>
             ))}
           </ul>
-        </section>
-      )
-    }
+        ) : (
+          <p class="home-posts__empty">还没有文章，快去写一篇吧。</p>
+        )
+      }
 
-    {
-      recentPosts.length > 0 && (
-        <section id="recent-posts" class="pt-12 pb-6">
-          <h2 class="text-2xl font-semibold tracking-wide">
-            {t.home.recentPosts}
-          </h2>
-          <ul>
-            {recentPosts.slice(0, postsConfig.perIndex).map(data => (
-              <Card variant="h3" {...data} />
-            ))}
-          </ul>
-        </section>
-      )
-    }
-
-    <div class="my-8 text-center">
-      <LinkButton href={getRelativeLocaleUrl(locale, "posts")}>
-        {t.home.allPosts}
-        <IconArrowRight class="inline-block rtl:-rotate-180" />
-      </LinkButton>
-    </div>
+      <div class="home-posts__more">
+        <LinkButton href={getRelativeLocaleUrl(locale, "posts")}>
+          {t.home.allPosts}
+          <IconArrowRight class="inline-block rtl:-rotate-180" />
+        </LinkButton>
+      </div>
+    </section>
   </main>
   <Footer />
 </Layout>
+
+<style>
+  .home-hero {
+    display: flex;
+    gap: 1.25rem;
+    align-items: flex-start;
+    padding: 1.5rem;
+    margin-bottom: 2.5rem;
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--accent) 8%, var(--background)),
+      var(--background)
+    );
+  }
+
+  .home-hero__avatar {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 9999px;
+    background: var(--accent);
+    color: var(--accent-foreground);
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  .home-hero__content {
+    min-width: 0;
+  }
+
+  .home-hero__eyebrow {
+    margin: 0 0 0.25rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+
+  .home-hero__title {
+    margin: 0 0 0.5rem;
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .home-hero__desc {
+    margin: 0;
+    max-width: 36rem;
+    font-size: 0.95rem;
+    line-height: 1.7;
+    color: var(--muted-foreground);
+  }
+
+  .home-hero__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+
+  .home-hero__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.85rem;
+    border-radius: 9999px;
+    font-size: 0.85rem;
+    text-decoration: none;
+    transition:
+      background-color 0.2s ease,
+      color 0.2s ease,
+      border-color 0.2s ease;
+  }
+
+  .home-hero__btn--primary {
+    background: var(--accent);
+    color: var(--accent-foreground);
+  }
+
+  .home-hero__btn--primary:hover {
+    filter: brightness(1.05);
+  }
+
+  .home-hero__btn--ghost {
+    border: 1px solid var(--border);
+    color: var(--foreground);
+    background: color-mix(in srgb, var(--background) 80%, transparent);
+  }
+
+  .home-hero__btn--ghost:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .home-posts__header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .home-posts__title {
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+  }
+
+  .home-posts__count {
+    font-size: 0.8rem;
+    color: var(--muted-foreground);
+  }
+
+  .home-posts__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .home-post-card {
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  }
+
+  .home-post-card:last-child {
+    border-bottom: none;
+  }
+
+  .home-post-card__link {
+    display: grid;
+    grid-template-columns: 6.5rem 1fr auto;
+    gap: 0.75rem 1rem;
+    align-items: start;
+    padding: 1rem 0.25rem;
+    color: inherit;
+    text-decoration: none;
+    transition: background-color 0.2s ease;
+    border-radius: 0.5rem;
+  }
+
+  .home-post-card__link:hover {
+    background: color-mix(in srgb, var(--muted) 35%, transparent);
+  }
+
+  .home-post-card__link:hover .home-post-card__title {
+    color: var(--accent);
+  }
+
+  .home-post-card__date {
+    padding-top: 0.15rem;
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+  }
+
+  .home-post-card__title {
+    margin: 0 0 0.25rem;
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.4;
+    transition: color 0.2s ease;
+  }
+
+  .home-post-card__desc {
+    margin: 0;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--muted-foreground);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .home-post-card__arrow {
+    margin-top: 0.2rem;
+    color: var(--muted-foreground);
+    opacity: 0;
+    transform: translateX(-4px);
+    transition:
+      opacity 0.2s ease,
+      transform 0.2s ease;
+  }
+
+  .home-post-card__link:hover .home-post-card__arrow {
+    opacity: 1;
+    transform: translateX(0);
+    color: var(--accent);
+  }
+
+  .home-posts__empty {
+    margin: 0;
+    padding: 2rem 0;
+    text-align: center;
+    color: var(--muted-foreground);
+    font-size: 0.9rem;
+  }
+
+  .home-posts__more {
+    margin-top: 1.5rem;
+    text-align: center;
+  }
+
+  @media (max-width: 640px) {
+    .home-hero {
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 1.25rem;
+    }
+
+    .home-hero__actions {
+      justify-content: center;
+    }
+
+    .home-post-card__link {
+      grid-template-columns: 1fr auto;
+    }
+
+    .home-post-card__date {
+      grid-column: 1 / -1;
+      padding-top: 0;
+    }
+
+    .home-post-card__arrow {
+      opacity: 1;
+      transform: none;
+    }
+  }
+</style>
 
 <script>
   document.addEventListener("astro:page-load", () => {

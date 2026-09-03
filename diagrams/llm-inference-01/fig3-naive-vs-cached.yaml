@@ -1,0 +1,101 @@
+meta:
+  profile: engineering-review
+  theme: tech-blue
+  source: generated
+  layout: horizontal
+  canvas: 1120x560
+  title: "朴素 generate 与 KV Cache"
+  description: "无 cache 每步重算整段；有 cache 则 prefill 一次、decode 增量。"
+
+modules:
+  - id: naive
+    label: "Naive：每步吃完整序列"
+  - id: cached
+    label: "Cached：Prefill 一次，Decode 增量"
+
+nodes:
+  - id: n-seq
+    label: "tokens[1..t]"
+    type: input
+    size: large
+    module: naive
+    position: { x: 176, y: 168 }
+  - id: n-fwd
+    label: "完整前向\n重算历史 K/V"
+    type: process
+    size: large
+    module: naive
+    position: { x: 176, y: 312 }
+  - id: n-sample
+    label: "sample 第 t+1 个"
+    type: output
+    size: large
+    module: naive
+    position: { x: 176, y: 456 }
+  - id: c-prompt
+    label: "Prompt 1..n"
+    type: input
+    size: large
+    module: cached
+    position: { x: 640, y: 160 }
+  - id: c-prefill
+    label: "Prefill 一次"
+    type: process
+    size: large
+    module: cached
+    position: { x: 640, y: 288 }
+  - id: c-kv
+    label: "KV Cache"
+    type: memory
+    size: large
+    module: cached
+    position: { x: 896, y: 288 }
+  - id: c-dec
+    label: "Decode 一步\n只进 1 个 token"
+    type: attention
+    size: large
+    module: cached
+    position: { x: 640, y: 424 }
+  - id: c-tok
+    label: "新 token"
+    type: output
+    size: medium
+    module: cached
+    position: { x: 896, y: 424 }
+
+edges:
+  - from: n-seq
+    to: n-fwd
+    type: primary
+  - from: n-fwd
+    to: n-sample
+    type: primary
+  - from: n-sample
+    to: n-seq
+    type: optional
+    label: "拼回再跑"
+    labelOffset: { x: -52, y: 0 }
+    waypoints:
+      - { x: 64, y: 456 }
+      - { x: 64, y: 168 }
+  - from: c-prompt
+    to: c-prefill
+    type: primary
+  - from: c-prefill
+    to: c-kv
+    type: memory_write
+  - from: c-prefill
+    to: c-dec
+    type: primary
+  - from: c-kv
+    to: c-dec
+    type: memory_read
+    label: "读 KV"
+    labelOffset: { x: 36, y: 12 }
+  - from: c-dec
+    to: c-tok
+    type: primary
+  - from: c-tok
+    to: c-kv
+    type: memory_write
+    label: "追加"

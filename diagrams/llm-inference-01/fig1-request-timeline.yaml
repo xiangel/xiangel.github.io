@@ -1,0 +1,57 @@
+meta:
+  profile: engineering-review
+  theme: tech-blue
+  source: generated
+  layout: horizontal
+  canvas: 1184x320
+  title: "一次请求的 Prefill 与 Decode"
+  description: "同一请求裂成 TTFT 与 TPOT 两段。"
+
+modules:
+  - id: decode-phase
+    label: "Decode · TPOT · memory-bound"
+
+nodes:
+  - id: prompt
+    label: "Prompt tokens"
+    type: input
+    size: large
+    position: { x: 96, y: 168 }
+  - id: prefill
+    label: "Prefill\nTTFT · compute"
+    type: process
+    size: large
+    position: { x: 336, y: 168 }
+  - id: d1
+    label: "token 1"
+    type: process
+    size: medium
+    module: decode-phase
+    position: { x: 608, y: 176 }
+  - id: d2
+    label: "token 2"
+    type: process
+    size: medium
+    module: decode-phase
+    position: { x: 800, y: 176 }
+  - id: d3
+    label: "token 3 …"
+    type: output
+    size: medium
+    module: decode-phase
+    position: { x: 992, y: 176 }
+
+edges:
+  - from: prompt
+    to: prefill
+    type: primary
+  - from: prefill
+    to: d1
+    type: primary
+    label: "首 token"
+  - from: d1
+    to: d2
+    type: data
+  - from: d2
+    to: d3
+    type: data

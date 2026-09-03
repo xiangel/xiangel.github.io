@@ -1,0 +1,81 @@
+meta:
+  profile: engineering-review
+  theme: tech-blue
+  source: generated
+  layout: hierarchical
+  canvas: 1280x560
+  title: "从生成式约束到推理系统模块"
+  description: "四条 Transformer 约束长成调度、KV、两相与执行四件套。"
+
+nodes:
+  - id: arch
+    label: "Decoder-only\n因果自回归"
+    type: llm
+    size: xl
+    position: { x: 640, y: 80 }
+  - id: c1
+    label: "多 iteration"
+    type: process
+    size: large
+    position: { x: 128, y: 248 }
+  - id: c2
+    label: "K/V 可缓存\n显存线性涨"
+    type: memory
+    size: large
+    position: { x: 400, y: 248 }
+  - id: c3
+    label: "Prefill ≠ Decode"
+    type: attention
+    size: large
+    position: { x: 672, y: 248 }
+  - id: c4
+    label: "请求异构"
+    type: queue
+    size: large
+    position: { x: 944, y: 248 }
+  - id: m1
+    label: "Scheduler\n连续批处理"
+    type: gateway
+    size: large
+    position: { x: 128, y: 432 }
+  - id: m2
+    label: "KV Manager\npaging / prefix"
+    type: database
+    size: large
+    position: { x: 400, y: 432 }
+  - id: m3
+    label: "两相策略\nchunk / P-D"
+    type: service
+    size: large
+    position: { x: 672, y: 432 }
+  - id: m4
+    label: "Executor + Serving\nkernel / 并行 / HTTP"
+    type: tool
+    size: large
+    position: { x: 944, y: 432 }
+
+edges:
+  - from: arch
+    to: c1
+    type: primary
+  - from: arch
+    to: c2
+    type: primary
+  - from: arch
+    to: c3
+    type: primary
+  - from: arch
+    to: c4
+    type: primary
+  - from: c1
+    to: m1
+    type: data
+  - from: c2
+    to: m2
+    type: data
+  - from: c3
+    to: m3
+    type: data
+  - from: c4
+    to: m4
+    type: data

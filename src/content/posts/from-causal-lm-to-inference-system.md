@@ -1,7 +1,7 @@
 ---
 author: xiangel
 pubDatetime: 2026-09-03T17:30:00Z
-title: 从下一个 token 说起：生成式 Transformer 如何长出推理系统
+title: 从 Transformer 出发来看推理系统
 slug: from-causal-lm-to-inference-system
 featured: true
 draft: false
@@ -207,7 +207,7 @@ GQA 把每个 token 的 KV 缩小几倍，是模型侧给系统减负。减完�
 
 | 篇  | 主题                                     | 从本篇哪条线接下去 |
 | --- | ---------------------------------------- | ------------------ |
-| 01  | 从生成式 Transformer 到模块地图          | 本篇               |
+| 01  | 从 Transformer 出发来看推理系统          | 本篇               |
 | 02  | KV：分页与前缀共用                       | 显存按 token 涨    |
 | 03  | 调度：每轮重新组队，以及把长 prompt 切段 | 一次请求很多轮     |
 | 04  | 把处理 prompt 和吐词拆开                 | 两种活不要硬挤     |

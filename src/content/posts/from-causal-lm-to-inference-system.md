@@ -212,5 +212,3 @@ Serving 是离线 `LLM.generate` 与在线异步引擎的差别。vLLM 的解剖
 5. Agrawal et al., *Taming Throughput-Latency Tradeoff in LLM Inference with Sarathi-Serve*, OSDI 2024.
 6. Zhong et al., *DistServe*, OSDI 2024.
 7. Gordić, [Inside vLLM: Anatomy of a High-Throughput LLM Inference System](https://vllm.ai/blog/2025-09-05-anatomy-of-vllm), 2025.
-
-图用 [draw.io skill](https://github.com/bahayonghang/drawio-skills) 从 YAML 生成，源文件在仓库 `diagrams/llm-inference-01/`。本环境无 draw.io Desktop，导出为 SVG。

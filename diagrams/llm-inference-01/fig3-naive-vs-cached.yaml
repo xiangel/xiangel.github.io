@@ -1,0 +1,101 @@
+meta:
+  profile: engineering-review
+  theme: tech-blue
+  source: generated
+  layout: horizontal
+  canvas: 1120x560
+  title: "朴素生成 vs 缓存历史"
+  description: "无缓存每步重算整段；有缓存则问题算一次，后面只追加。"
+
+modules:
+  - id: naive
+    label: "朴素：每步把整段再算一遍"
+  - id: cached
+    label: "有缓存：问题算一次，后面只追加"
+
+nodes:
+  - id: n-seq
+    label: "已有的整段"
+    type: input
+    size: large
+    module: naive
+    position: { x: 176, y: 168 }
+  - id: n-fwd
+    label: "完整前向\n历史再算一遍"
+    type: process
+    size: large
+    module: naive
+    position: { x: 176, y: 312 }
+  - id: n-sample
+    label: "抽出下一个词"
+    type: output
+    size: large
+    module: naive
+    position: { x: 176, y: 456 }
+  - id: c-prompt
+    label: "整段问题"
+    type: input
+    size: large
+    module: cached
+    position: { x: 640, y: 160 }
+  - id: c-prefill
+    label: "先处理问题"
+    type: process
+    size: large
+    module: cached
+    position: { x: 640, y: 288 }
+  - id: c-kv
+    label: "历史 K/V"
+    type: memory
+    size: large
+    module: cached
+    position: { x: 896, y: 288 }
+  - id: c-dec
+    label: "再吐一个词"
+    type: attention
+    size: large
+    module: cached
+    position: { x: 640, y: 424 }
+  - id: c-tok
+    label: "新词"
+    type: output
+    size: medium
+    module: cached
+    position: { x: 896, y: 424 }
+
+edges:
+  - from: n-seq
+    to: n-fwd
+    type: primary
+  - from: n-fwd
+    to: n-sample
+    type: primary
+  - from: n-sample
+    to: n-seq
+    type: optional
+    label: "拼回再跑"
+    labelOffset: { x: -52, y: 0 }
+    waypoints:
+      - { x: 64, y: 456 }
+      - { x: 64, y: 168 }
+  - from: c-prompt
+    to: c-prefill
+    type: primary
+  - from: c-prefill
+    to: c-kv
+    type: memory_write
+  - from: c-prefill
+    to: c-dec
+    type: primary
+  - from: c-kv
+    to: c-dec
+    type: memory_read
+    label: "读历史"
+    labelOffset: { x: 36, y: 12 }
+  - from: c-dec
+    to: c-tok
+    type: primary
+  - from: c-tok
+    to: c-kv
+    type: memory_write
+    label: "追加"

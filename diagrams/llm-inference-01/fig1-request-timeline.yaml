@@ -1,0 +1,57 @@
+meta:
+  profile: engineering-review
+  theme: tech-blue
+  source: generated
+  layout: horizontal
+  canvas: 1184x320
+  title: "一次请求：先读完问题，再一个词一个词往外吐"
+  description: "同一请求裂成「等到第一个词」和「词与词的间隔」两段。"
+
+modules:
+  - id: decode-phase
+    label: "吐新词 · 词与词的间隔"
+
+nodes:
+  - id: prompt
+    label: "你的问题"
+    type: input
+    size: large
+    position: { x: 96, y: 168 }
+  - id: prefill
+    label: "读完问题\n等到第一个词"
+    type: process
+    size: large
+    position: { x: 336, y: 168 }
+  - id: d1
+    label: "第1个词"
+    type: process
+    size: medium
+    module: decode-phase
+    position: { x: 608, y: 176 }
+  - id: d2
+    label: "第2个词"
+    type: process
+    size: medium
+    module: decode-phase
+    position: { x: 800, y: 176 }
+  - id: d3
+    label: "第3个词 …"
+    type: output
+    size: medium
+    module: decode-phase
+    position: { x: 992, y: 176 }
+
+edges:
+  - from: prompt
+    to: prefill
+    type: primary
+  - from: prefill
+    to: d1
+    type: primary
+    label: "首词出现"
+  - from: d1
+    to: d2
+    type: data
+  - from: d2
+    to: d3
+    type: data

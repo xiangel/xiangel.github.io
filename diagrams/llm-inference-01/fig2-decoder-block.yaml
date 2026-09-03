@@ -1,0 +1,88 @@
+meta:
+  profile: engineering-review
+  theme: tech-blue
+  source: generated
+  layout: vertical
+  canvas: 720x960
+  title: "一层 decoder：读历史、写新的 Key/Value"
+  description: "因果自注意力写出 K/V，残差块串成生成主干。"
+
+nodes:
+  - id: x-in
+    label: "这一层的输入"
+    type: input
+    size: large
+    position: { x: 240, y: 72 }
+  - id: n1
+    label: "归一化"
+    type: norm
+    size: medium
+    position: { x: 240, y: 192 }
+  - id: attn
+    label: "因果自注意力"
+    type: attention
+    size: large
+    position: { x: 240, y: 328 }
+  - id: add1
+    label: "+ 残差"
+    type: operator
+    size: small
+    position: { x: 240, y: 456 }
+  - id: n2
+    label: "归一化"
+    type: norm
+    size: medium
+    position: { x: 240, y: 568 }
+  - id: ffn
+    label: "前馈网络"
+    type: process
+    size: large
+    position: { x: 240, y: 696 }
+  - id: add2
+    label: "+ 残差"
+    type: operator
+    size: small
+    position: { x: 240, y: 816 }
+  - id: x-out
+    label: "层输出"
+    type: output
+    size: medium
+    position: { x: 240, y: 920 }
+  - id: kv
+    label: "历史 K/V"
+    type: memory
+    size: large
+    position: { x: 544, y: 328 }
+
+edges:
+  - from: x-in
+    to: n1
+    type: primary
+  - from: n1
+    to: attn
+    type: primary
+  - from: attn
+    to: add1
+    type: primary
+  - from: add1
+    to: n2
+    type: primary
+  - from: n2
+    to: ffn
+    type: primary
+  - from: ffn
+    to: add2
+    type: primary
+  - from: add2
+    to: x-out
+    type: primary
+  - from: attn
+    to: kv
+    type: memory_write
+    label: "写 K/V"
+    labelOffset: { x: 0, y: -18 }
+  - from: kv
+    to: attn
+    type: memory_read
+    label: "读历史"
+    labelOffset: { x: 0, y: 18 }

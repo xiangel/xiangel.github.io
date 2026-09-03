@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "blog-scope-refiner": {
+      "source": "prrao87/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/blog-scope-refiner/SKILL.md",
+      "computedHash": "e35d50c2d85fdfc4381916aa05a0a4371f3eeb93ffab41551d8a5f5613563638"
+    },
+    "drawio": {
+      "source": "bahayonghang/drawio-skills",
+      "sourceType": "github",
+      "skillPath": "skills/drawio/SKILL.md",
+      "computedHash": "7136e8aed5e720f5061c6026307d0731d6c271520025de9af6a9a022fbd9969f"
+    }
+  }
+}

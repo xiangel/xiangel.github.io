@@ -1,0 +1,81 @@
+meta:
+  profile: engineering-review
+  theme: tech-blue
+  source: generated
+  layout: hierarchical
+  canvas: 1280x560
+  title: "从生成方式到系统模块"
+  description: "四条约束长成调度、显存管理、两段安排、真正去算。"
+
+nodes:
+  - id: arch
+    label: "只往右生成\n（因果自回归）"
+    type: llm
+    size: xl
+    position: { x: 640, y: 80 }
+  - id: c1
+    label: "一次要跑很多轮"
+    type: process
+    size: large
+    position: { x: 128, y: 248 }
+  - id: c2
+    label: "历史可缓存\n显存会涨"
+    type: memory
+    size: large
+    position: { x: 400, y: 248 }
+  - id: c3
+    label: "读问题 ≠ 吐新词"
+    type: attention
+    size: large
+    position: { x: 672, y: 248 }
+  - id: c4
+    label: "有人短、有人长"
+    type: queue
+    size: large
+    position: { x: 944, y: 248 }
+  - id: m1
+    label: "调度：\n下一轮让谁上场"
+    type: gateway
+    size: large
+    position: { x: 128, y: 432 }
+  - id: m2
+    label: "显存：\n按块管历史 K/V"
+    type: database
+    size: large
+    position: { x: 400, y: 432 }
+  - id: m3
+    label: "两段活\n怎么安排"
+    type: service
+    size: large
+    position: { x: 672, y: 432 }
+  - id: m4
+    label: "真正去算\n接到用户"
+    type: tool
+    size: large
+    position: { x: 944, y: 432 }
+
+edges:
+  - from: arch
+    to: c1
+    type: primary
+  - from: arch
+    to: c2
+    type: primary
+  - from: arch
+    to: c3
+    type: primary
+  - from: arch
+    to: c4
+    type: primary
+  - from: c1
+    to: m1
+    type: data
+  - from: c2
+    to: m2
+    type: data
+  - from: c3
+    to: m3
+    type: data
+  - from: c4
+    to: m4
+    type: data

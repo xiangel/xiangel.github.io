@@ -4,52 +4,52 @@ meta:
   source: generated
   layout: hierarchical
   canvas: 1280x560
-  title: "从生成式约束到推理系统模块"
-  description: "四条 Transformer 约束长成调度、KV、两相与执行四件套。"
+  title: "从生成方式到系统模块"
+  description: "四条约束长成调度、显存管理、两段安排、真正去算。"
 
 nodes:
   - id: arch
-    label: "Decoder-only\n因果自回归"
+    label: "只往右生成\n（因果自回归）"
     type: llm
     size: xl
     position: { x: 640, y: 80 }
   - id: c1
-    label: "多 iteration"
+    label: "一次要跑很多轮"
     type: process
     size: large
     position: { x: 128, y: 248 }
   - id: c2
-    label: "K/V 可缓存\n显存线性涨"
+    label: "历史可缓存\n显存会涨"
     type: memory
     size: large
     position: { x: 400, y: 248 }
   - id: c3
-    label: "Prefill ≠ Decode"
+    label: "读问题 ≠ 吐新词"
     type: attention
     size: large
     position: { x: 672, y: 248 }
   - id: c4
-    label: "请求异构"
+    label: "有人短、有人长"
     type: queue
     size: large
     position: { x: 944, y: 248 }
   - id: m1
-    label: "Scheduler\n连续批处理"
+    label: "调度：\n下一轮让谁上场"
     type: gateway
     size: large
     position: { x: 128, y: 432 }
   - id: m2
-    label: "KV Manager\npaging / prefix"
+    label: "显存：\n按块管历史 K/V"
     type: database
     size: large
     position: { x: 400, y: 432 }
   - id: m3
-    label: "两相策略\nchunk / P-D"
+    label: "两段活\n怎么安排"
     type: service
     size: large
     position: { x: 672, y: 432 }
   - id: m4
-    label: "Executor + Serving\nkernel / 并行 / HTTP"
+    label: "真正去算\n接到用户"
     type: tool
     size: large
     position: { x: 944, y: 432 }

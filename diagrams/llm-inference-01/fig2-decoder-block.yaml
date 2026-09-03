@@ -4,22 +4,22 @@ meta:
   source: generated
   layout: vertical
   canvas: 720x960
-  title: "Decoder-only 块与 KV 读写"
+  title: "一层 decoder：读历史、写新的 Key/Value"
   description: "因果自注意力写出 K/V，残差块串成生成主干。"
 
 nodes:
   - id: x-in
-    label: "x  token 序列"
+    label: "这一层的输入"
     type: input
     size: large
     position: { x: 240, y: 72 }
   - id: n1
-    label: "RMSNorm"
+    label: "归一化"
     type: norm
     size: medium
     position: { x: 240, y: 192 }
   - id: attn
-    label: "Causal Self-Attn"
+    label: "因果自注意力"
     type: attention
     size: large
     position: { x: 240, y: 328 }
@@ -29,12 +29,12 @@ nodes:
     size: small
     position: { x: 240, y: 456 }
   - id: n2
-    label: "RMSNorm"
+    label: "归一化"
     type: norm
     size: medium
     position: { x: 240, y: 568 }
   - id: ffn
-    label: "FFN / SwiGLU"
+    label: "前馈网络"
     type: process
     size: large
     position: { x: 240, y: 696 }
@@ -49,7 +49,7 @@ nodes:
     size: medium
     position: { x: 240, y: 920 }
   - id: kv
-    label: "KV Cache"
+    label: "历史 K/V"
     type: memory
     size: large
     position: { x: 544, y: 328 }

@@ -1,214 +1,229 @@
 ---
 author: xiangel
 pubDatetime: 2026-09-03T17:30:00Z
-title: 先别谈 vLLM：从因果自回归看推理系统的模块从哪来
+title: 从下一个 token 说起：生成式 Transformer 如何长出推理系统
 slug: from-causal-lm-to-inference-system
 featured: true
 draft: false
 tags:
   - 大模型推理系统
   - Transformer
-  - LLM Serving
-description: 生成式 Transformer 的计算性质，已经决定了推理系统必须长什么样。本文从因果自回归抽出四条约束，映射成调度、KV、两相与执行四件套。
+  - 生成式模型
+description: 假设你已经会一点 Transformer：自注意力、因果掩码、预测下一个词。这篇从最朴素的生成循环讲起，说明缓存、两种活、以及推理系统模块是怎么长出来的。不预设你用过任何推理引擎。
 ---
 
-会写 `model.generate`，并不等于理解大模型推理系统。打开 vLLM 或 SGLang 的文档，名词很多：PagedAttention、continuous batching、chunked prefill、prefix cache、P/D disaggregation。它们看起来像一份优化清单。更准确的读法是：这些模块不是后来「加」上去的，而是生成式 Transformer 的计算性质逼出来的。
+假设你已经知道这些：Transformer 用自注意力看序列；decoder 有一层**因果掩码**，每个位置只能看它左边；训练时模型在学「给定前面的词，下一个词是什么」。
 
-同一套权重、同一次请求，prompt 阶段 GPU 算力往往打满，生成阶段却在等显存。这不是实现粗糙，而是**因果自回归把一次前向劈成了两种作业**。本篇是系列第一篇，只做一件事：从架构抽出四条推理约束，映射成系统模块地图。不写 CUDA kernel，不比引擎快慢。读完后，你应能把上面那些名词反推回 Transformer 的某条约束，并判断它在修哪一类瓶颈。
+聊天机器人、代码补全、长文续写，用的都是这件事。差别在于：训练可以一次看完整段话；真正对用户吐字时，必须**一个 token 一个 token 往外接**。本篇是系列第一篇。不讲某款引擎怎么用，只回答一个问题：
 
-## 一次请求，两种时间
+> 从你已经熟悉的生成式 Transformer，到一个能同时服务很多用户的推理系统，中间到底缺了哪几块？
 
-一次用户请求在服务端不是「跑一遍模型」。它先把整段 prompt 编成内部状态，再一个 token 一个 token 往外吐。前一段叫 **prefill**，后一段叫 **decode**：
+读完后，你应能自己说出：为什么生成不能「跑一遍模型就结束」，为什么要缓存 Key/Value，为什么处理 prompt 和吐新词是两种活，以及调度、显存管理这些模块是从哪条约束长出来的。
 
-![一次请求裂成 Prefill（TTFT）与 Decode（TPOT）](/assets/llm-inference-01/fig1-request-timeline.svg)
+## 你已经熟悉的骨架
 
-两个常用指标正好对应这两段：
+2017 年的 Transformer 有 encoder 和 decoder。encoder 双向看完整输入；decoder 一边看已经生成的词，一边用 cross-attention 去问 encoder。它最初是为翻译设计的。
 
-- **TTFT**（time to first token）：用户等到第一个输出 token 的时间，主要由 prefill 决定。
-- **TPOT**（time per output token）：之后每个 token 的间隔，主要由 decode 决定。有的论文写成 TBT（time between tokens），含义接近。
+后来主流大模型走了更简单的一条路：丢掉 encoder，也丢掉 cross-attention。整张网只剩一叠**带因果掩码的 decoder 层**。你的问题（prompt）和模型的回答，是同一条序列的左边和右边。训练目标就是 next-token prediction：给定前缀，预测下一个 token。
 
-为什么同一套层会表现出两种脾气？看算术强度。prefill 对整段 prompt 并行，每个权重会被很多 token 复用，矩阵乘法能喂饱 Tensor Core，整体偏 **compute-bound**。decode 每步只进 1 个 token，却几乎要把全部权重和历史 KV 从 HBM 读一遍，算得少、搬得多，偏 **memory-bound**。单条 7B 量级模型，decode 的理论上限大致是「显存带宽 / 权重大小」：带宽 2 TB/s、权重 14 GB 时，单流大约一百多个 token/s。batch 可以把同一次权重读取摊到多条请求上，直到 KV 把显存吃满。
+这对「怎么跑模型」的影响很大：没有单独的理解模块，也没有单独的生成模块。同一组层，先消化左边的 prompt，再把序列往右延长。
 
-后面所有「调度」「切块」「分离」，都是在给这两种作业找共存方式。若把它们当成同一次 `forward`，TTFT 和 TPOT 会互相绑架。
+用一句话把这件事走完。假设用户只打了四个字：「今天天气」。模型不会先「理解」再「写作」，它做的是：
 
-## 生成式架构：只保留推理用得到的骨架
+1. 看着「今 / 天 / 天 / 气」，猜下一个最可能的词，比如「真」。
+2. 把「真」接到右边，序列变成「今天天气真」。
+3. 再猜下一个，比如「好」。再接到右边。停下来的条件，是碰到结束符，或你规定写够多少个词。
 
-2017 年的 Transformer 是 encoder + decoder + cross-attention，面向机器翻译：encoder 双向看完整输入，decoder 一边看已生成的目标词，一边用 cross-attention 去问 encoder。GPT 路线做了两步简化：丢掉整个 encoder，也丢掉 cross-attention。prompt 和生成共用一条**因果栈**。训练目标变成纯粹的 next-token prediction——给定前缀，预测下一个 token。
+每一步都只用到已经出现的左边。这就是因果掩码在生成时的含义：**右边还不存在，所以不能看右边。** 聊天、补全、写长文，都是这条循环在转。
 
-这对推理的直接后果是：没有单独的「理解模块」。系统不能先 encode 再 decode；prefill 和 decode 是同一组层、同一次因果 attention 的两个阶段。prompt 只是这条序列左边的前缀，生成是把前缀往右延长。
+一层可以想成：
 
-现代 decoder-only 块可以画成：
+![一层 decoder：归一化、因果自注意力、前馈，以及读写历史 Key/Value](/assets/llm-inference-01/fig2-decoder-block.svg)
 
-![Decoder-only 块：RMSNorm、因果自注意力、FFN，以及向 KV Cache 读写](/assets/llm-inference-01/fig2-decoder-block.svg)
+和推理直接相关的，只有三条：
 
-和推理相关的性质只有三条，值得反复钉死：
+1. **因果掩码。** 位置 i 只能看更早的 token。所以位置 1 到 i-1 的 Key、Value，一旦算过，下一步不必重算，只要留着。
+2. **自回归。** 训练时每个位置的预测只依赖左边，一段话可以一次算完。生成时不行：没有下一个 token，就没有再下一个，必须逐步。
+3. **输出。** 最后一层变成词表上的分数（logits），按规则抽出一个 token，接到序列末尾，再进下一轮。
 
-1. **因果掩码。** 位置 `i` 只能看更早的 token。因此历史的 Key/Value 一旦算过，下一步不必重算，只要存下来。
-2. **自回归。** 训练时可一次算完整个序列的 next-token loss（每个位置的预测只依赖左边，可以并行）。推理必须逐步：每步一次完整前向，才能得到下一个 token。
-3. **输出。** 最后一层投影到词表 logits，按温度 / top-p 等规则 sample 一个 token，拼回序列，再进入下一步。采样发生在模型外面，但仍占关键路径。
+层里叫 RMSNorm、RoPE、SwiGLU 的那些，改的是每一层怎么算；Grouped-Query Attention（GQA）会减少要保存的 Key/Value 头数。它们改变的是**每个 token 有多贵**，不改变「必须逐步生成」这件事。本篇以系统为主，这些名字只记一笔，后面遇到再展开。
 
-模型结构这些年也在改。本篇只记账、不展开训练故事：
+## 最朴素的生成循环
 
-| 改动 | 对推理的影响 |
-| --- | --- |
-| Pre-Norm / RMSNorm | 每层少做一点归约，带宽友好，但仍是小头 |
-| RoPE | 位置进 Q/K，和长上下文、cache 布局绑在一起 |
-| GQA / MQA | 减少 KV head 数，单位 token 显存和带宽下降 |
-| SwiGLU FFN | 改变 MLP 计算量，不改变「逐步生成」这件事 |
-| MoE | 专家路由，执行器要考虑 expert parallel，而不只是 TP/PP |
-
-一句话：模型在改**单位 token 的成本形状**；系统要解决的是**如何在这个形状上把多请求跑满 GPU**。GQA 能让同一张卡塞下更大的 batch，但它替代不了调度器和分页。
-
-## 朴素 `generate` 与四条约束
-
-先写一个会正确出字、但上不了线的循环。这就是多数人第一次实现生成时的样子：
+把「预测下一个 token」写成代码，通常是这样：
 
 ```python
 def naive_generate(model, tokens, n):
     for _ in range(n):
-        logits = model(tokens)       # 每步吃完整序列
-        nxt = sample(logits[:, -1])
+        logits = model(tokens)       # 每步把目前已有的整段再送进模型
+        nxt = sample(logits[:, -1])  # 只取最后一个位置的预测
         tokens = torch.cat([tokens, nxt], dim=1)
     return tokens
 ```
 
-第 `t` 步对前 `t-1` 个 token 的 K/V 是重复劳动。序列越长，浪费越明显：attention 对历史是平方级扫描。加上 KV cache 之后，循环长这样——GPT-2 源码里的 `past` 就是这个东西：
+这在正确性上没问题：因果掩码保证最后一个位置只看见前面。但它在做一件浪费的事——第 t 步把前 t-1 个 token 的注意力又算了一遍。序列越长，重复越多。注意力对历史大致是平方级的：历史翻倍，这部分工作大约翻四倍。
+
+回想因果掩码：过去的 Key、Value 本来就可以留。于是循环可以改成两段：先把 prompt 整段算完并存下 K/V，再每次只送进**一个新 token**，同时读历史、写下新的 K/V。这个缓存就叫 **KV Cache**。
 
 ```python
 def cached_generate(model, tokens, n):
     out = []
-    logits, kv = model(tokens, kv=None)   # prefill：整段 prompt 一次算完
+    logits, kv = model(tokens, kv=None)  # 先处理整段 prompt
     nxt = sample(logits[:, -1])
     out.append(nxt)
     for _ in range(n - 1):
-        logits, kv = model(nxt, kv=kv)    # decode：只进 1 个 token
+        logits, kv = model(nxt, kv=kv)   # 之后每步只进 1 个 token
         nxt = sample(logits[:, -1])
         out.append(nxt)
     return out
 ```
 
-两边对比：
+![左边每步把整段再算一遍；右边先处理问题，再只追加新词](/assets/llm-inference-01/fig3-naive-vs-cached.svg)
 
-![朴素 generate 每步重算整段；Cached 路径 prefill 一次、decode 增量写 KV](/assets/llm-inference-01/fig3-naive-vs-cached.svg)
+左边：每步把已经看过的历史再算一遍。右边：问题算一次，后面只做增量。如果你翻过 GPT-2 的源码，里面那个叫 `past` 的东西，就是这个缓存。
 
-左边每步把已经看过的历史再算一遍；右边 prefill 一次写入 KV，之后每步只带上新 token，并追加新的 K/V。从这一对循环可以抽出四条约束。它们不是优化清单，是架构推出来的。
+到这里，一次「请模型写一段话」已经不是一次前向了。它裂成了两种活。
 
-### 约束 1：自回归 = 多 iteration
+## 同一次生成，两种活
 
-一次用户请求 ≠ 一次模型调用。生成 100 个 token，至少要 1 次 prefill 加上约 99 次 decode。传统推理服务（图像分类、BERT 句向量）假设一次 forward 就结束，于是按「请求」组 batch：凑齐 N 条，一起跑完，一起返回。生成式 workload 会把这个假设撕开——短请求必须等最长的那个结束才能返回，新到达的请求也只能在门外等当前 batch 全部结束。
+右边那段循环里，第一行和 for 循环里的每一行，看起来都是 `model(...)`，算力形态却完全不同。
 
-**系统萌芽：** 调度粒度必须到 iteration。Orca（OSDI 2022）把这一点写成 iteration-level scheduling：每个 step 只跑一批请求的**一轮**前向，完成的马上离开，新的马上进来。这也是后来常说的 continuous batching / in-flight batching。本篇只需要记住：没有 iteration 级调度，GPU 会把大量时间花在等待最长序列上。
+- **处理 prompt**（常叫 prefill）：一次吃进很多 token，矩阵乘法能把 GPU 的计算单元喂得较满。
+- **吐新词**（常叫 decode）：每步只进 1 个 token，却几乎要把全部模型权重，以及已经攒下的 KV，从显存里读一遍。算得少，搬数据多。
 
-举一个最小例子。三条请求同时开始，生成长度分别是 4、20、128 个 token。请求级 batch 必须等 128 那条结束，4 和 20 的调用方却已经可以返回。iteration 级调度下，第 4 步结束后腾出的槽位可以立刻塞进新请求。吞吐来自「槽位不被最长序列锁死」，不是来自「模型算得更快」。
+用户能感觉到两个时间，正好对应这两段：
 
-### 约束 2：因果 ⇒ KV 可缓存，但显存线性涨
+- 等到**第一个**词出现：主要取决于 prompt 处理完没有。
+- 之后每个词之间的间隔：主要取决于每一步 decode 有多慢。
 
-KV cache 把 decode 从「对整段历史做平方级重算」变成「对当前 token 做线性增量」。省的是**计算**，换来的是**显存**。每层、每个 KV head、每个 token，都要存一组 Key 和一组 Value：
+论文里常把前者写成 TTFT，后者写成 TPOT。不必死记缩写，记住「等第一个词」和「词与词的间隔」即可。
+
+![一次请求裂成处理 prompt 与逐步吐词](/assets/llm-inference-01/fig1-request-timeline.svg)
+
+可以打个比方。处理 prompt 像把一叠试卷同时改完，计算器很忙。吐新词像每改一道题都要把整本答案册从书架上抽出来看一眼：计算器经常闲着，忙的是取书。同一套层、同一次注意力，两种脾气。后面所谓调度、切块、把两段拆开，都是在给这两种活找共存方式。
+
+decode 还有一个粗算：每吐一个词，大致要把全部权重读一遍。权重 14 GB、显存带宽 2 TB/s 时，单条请求大约每秒一百多个 token。同时服务多条请求，同一次读权重可以摊给大家——直到 KV 把剩下的显存吃满。于是「一次处理多少人」往往不是算力说了算，是显存说了算。
+
+## 四条约束
+
+把上面的观察收成四句话。推理系统不是凭空长出来的，是这四句话逼出来的。
+
+### 1. 一次用户请求 ≠ 一次模型调用
+
+生成 100 个词，至少要：处理 1 次 prompt，再加上大约 99 次 decode。图像分类、给句子做向量那种服务，一次前向就结束，可以按「请求」凑一批、一起跑完、一起返回。生成不行。短的那条已经写完了，还必须陪最长的那条耗着；新来的人只能在门外等这一批全部结束。
+
+最小例子：三条请求同时开始，分别要写 4、20、128 个词。如果必须整批结束才返回，写 4 个词的那个人也得等 128。若改成「每吐一个词就重新看一眼谁结束了、谁可以进来」，第 4 步结束后腾出的位置就能立刻给新人。吞吐来自「位置不被最长序列锁死」，不是来自「模型突然算得更快」。
+
+所以系统里需要一个**调度器**：不是按整次请求拍板，而是按「下一轮前向」拍板。
+
+### 2. 历史可缓存，但显存按 token 涨
+
+KV Cache 把 decode 从「对整段历史做平方级重算」变成「对当前这一个 token 做增量」。省的是计算，换来的是显存。每层、每个 KV 头、每个 token，都要存一组 Key 和一组 Value：
 
 ```text
-bytes / token = 2 × L × H_kv × d_h × elem_bytes
+每个 token 占用的 KV 字节 ≈ 2 × 层数 × KV头数 × 头维度 × 每个数的字节
 ```
 
-`2` 是 K 和 V；`L` 是层数；`H_kv` 是 KV head 数（GQA 之后通常小于 query head 数）；`d_h` 是 head 维度；`elem_bytes` 在 FP16/BF16 下是 2。手算两行：
+FP16 下一个数 2 字节。手算两行：
 
-| 模型 | 形状 | KV / token | 单条 4K |
+| 模型 | 形状 | 每个 token 的 KV | 一条 4K 上下文 |
 | --- | --- | --- | --- |
-| Llama-2-7B（无 GQA） | 32L × 32 KV × 128 | 512 KB | ~2.0 GB |
-| Llama-3-8B（GQA 8 KV） | 32L × 8 KV × 128 | 128 KB | ~0.5 GB |
+| 7B，没有 GQA | 32 层 × 32 头 × 128 | 512 KB | 约 2.0 GB |
+| 8B，GQA 只留 8 个 KV 头 | 32 层 × 8 头 × 128 | 128 KB | 约 0.5 GB |
 
-权重是固定成本：7B FP16 大约 14 GB，加载一次就在。KV 随请求数和长度涨，没有天花板。同一张 80 GB 卡，去掉权重和激活之后，剩下的显存决定了你能同时养活多少条 4K 上下文。这就是「为什么调大 batch 会 OOM，而看上去算力还没打满」的直接原因。
+模型权重是固定成本：7B 的 FP16 大约 14 GB，加载一次就在显存里。KV 会随「同时服务多少人、每条有多长」一直涨，没有天花板。同一张 80 GB 的卡，去掉权重和中间激活，剩下的显存决定了你能同时养活多少条 4K 对话。这就是「再加人就内存不够，但计算器看起来还没打满」的原因。
 
-GQA 把 Llama-2-7B 那种 512 KB/token 打到 Llama-3-8B 的 128 KB/token，大约 4 倍。它是模型侧给系统减负，不是调度器的替代品：减完之后，KV 仍然随长度线性涨，仍然要分页、回收、共享前缀。
+GQA 把每个 token 的 KV 缩小几倍，是模型侧给系统减负。减完之后，KV 仍然随长度线性涨，仍然要有人负责分配、回收、尽量让相同的前缀共用一份。
 
-### 约束 3：Prefill 与 Decode 是两种作业
+### 3. 处理 prompt 和吐新词，不要当成同一次计算
 
-有了 cache 之后，同一次请求内部已经是两种 kernel 形态。若再把**新到达的长 prefill** 和**正在飞的 decode** 塞进同一次 forward，decode 会被拖死：本来 memory-bound、只要几十毫秒的一步，突然要陪着一段 compute-bound 的长 prompt 跑完。
+同一次对话内部已经是两种活。若这时又来了一个人，带着很长的 prompt，你把它和处理到一半的吐词塞进**同一次**前向，正在一个字一个字往外蹦的人会被拖住：他本来每一步只要几十毫秒，突然要陪着别人改完一大叠试卷。
 
-Sarathi-Serve 在其论文设定下测到：朴素把长 prefill 和 decode 混跑，可使 token 间隔恶化一个数量级（文中约至 28×）。数字属于他们的 workload 和硬件，本文未复现；要记住的是方向——两相算力形态相反，不能当成同一次 `forward` 来调度。后面会看到三条对策：继续混跑但接受干扰、把 prefill 切成小块、或者把两相拆到不同的 GPU 上。
+有论文在特定数据和硬件上测过：把长 prompt 和正在吐词的请求硬混在一起，词与词的间隔可以差出一个数量级。数字会随场景变，方向稳定——两种活的忙闲相反，不能假装它们是同一次 `forward`。对策以后细讲，先有三种直觉：继续混，但接受互相干扰；把长 prompt 切成小段，每次只塞一点；或者把两段放到不同的 GPU 上。
 
-### 约束 4：请求异构
+### 4. 真实请求长短不一、结束有先有后
 
-线上几乎不会出现「所有请求一样长、一起开始、一起结束」。有人 32 个 token 的短问，有人 8K 的文档问答；有人立刻结束，有人要生成两千词；很多请求还共享同一段系统提示。按最大长度做静态 padding，短序列的算力被浪费——batch 里 8 条请求、最长 4096、平均 512 时，大量 attention 算在 pad 上。按最大长度预分配一整块 KV，短请求和已结束请求占用的显存收不回来。系统必须在运行时分配、回收内存，并动态组 batch。能共享的前缀，不该每条请求各算一遍：同一条系统提示被 100 个用户复用，prefill 那一段 KV 只该存在一份。
+线上几乎不会出现「所有人一样长、一起开始、一起结束」。有人问一句短话，有人丢进一篇文档；有人立刻说完，有人要写两千字；很多人还共享同一段系统设定（「你是一个助手……」）。
 
-## 模块地图：约束如何长成系统
+如果按最长的那条去补齐再一起算，短的那几条大量计算浪费在空白上。如果按最大长度给每人预留一整块 KV，短请求和已经结束的请求占着显存不放。系统必须能在运行中申请和归还内存，并且动态决定「下一轮让哪些人进场」。能共用的前缀，不该每人各算一遍：同一段系统设定被 100 个人用，对应的 KV 只该存在一份。
 
-把四条约束画在一张图上，就是本篇的交付物：
+## 这些约束如何变成系统模块
 
-![从 Decoder-only 因果自回归到 Scheduler、KV Manager、两相策略、Executor/Serving](/assets/llm-inference-01/fig4-constraint-to-modules.svg)
+把四条约束画在一张图上，就是本篇的交付物。名字可以先当路标，不必一次记全。
 
-每个模块只记职责和代表工作，不展开算法。读到具体引擎时，用这张图当索引，而不是当实现说明书。
+![从「只往右生成」长出调度、显存管理、两段安排、真正去算](/assets/llm-inference-01/fig4-constraint-to-modules.svg)
 
-### KV 管理：修约束 2 和约束 4 的显存部分
+### 显存里的 KV 谁来管
 
-职责：按 token 追加 K/V，请求结束立刻回收，能共享的前缀尽量共享。朴素做法是给每条请求预留一块「最大长度 × 层数」的连续 buffer。输出比上限短时，尾部空着；请求结束到下一次分配之间，中间可能碎掉。vLLM 的 PagedAttention 把 KV 做成接近操作系统的分页：逻辑连续、物理按块；论文报告相对连续分配可把浪费压到接近零，吞吐在同延迟下相对当时的 FasterTransformer / Orca 有数倍提升。系统提示、RAG 的固定模板、多轮对话的历史，则不必重复 prefill——这是 prefix cache。SGLang 的 RadixAttention 把共享前缀做成树，是这一路的代表。
+对应约束 2 和约束 4。按 token 追加 K/V，请求结束立刻收回，相同前缀尽量共享。
 
-细节留给第 02 篇：页表、block size、radix tree、以及量化 KV 时的精度取舍。
+朴素做法是给每人预留一块「最大长度 × 层数」的连续空间。输出比上限短，尾部空着；一个人走了、下一个人来，中间还可能碎掉，大块空位却拼不起来。更好的做法是把 KV 切成固定大小的小块，逻辑上连续、物理上可以东一块西一块——很像操作系统管理内存的分页。系统设定、多轮对话里已经说过的话，则不必每次从 prompt 再算一遍，这就是前缀缓存。
 
-### Scheduler：修约束 1 和约束 4 的时间部分
+分页怎么做、前缀怎么做成树，是第 02 篇的事。本篇只需记住：没有这块，单条请求的 cache 也撑不起很多人同时用。
 
-职责：每个 iteration 决定哪几个请求进入下一次 forward。Orca 的连续批处理解决「短请求被长请求拖死」；它还要在「先打完新来的 prefill」和「别饿死正在 decode 的人」之间做选择。FCFS 简单，但对延迟敏感的交互请求不友好；priority 队列要定义清楚「优先」指 TTFT 还是 TPOT。waiting / running / swapped 这些队列名字会在 vLLM 文档里出现，本篇只要求你知道：调度器不是可有可无的外围，它就是把多 iteration 变成可持续服务的那一层。
+### 下一轮让谁上场：调度
 
-队列策略、抢占、token budget，是第 03 篇的事。
+对应约束 1 和约束 4。每个「吐一个词 / 处理一小段 prompt」的回合，决定哪些请求进入下一次前向。
 
-### 两相策略：修约束 3
+它要解决两件事：写完的人马上离开、新人马上进来；以及，新来的长 prompt 和处理到一半的吐词抢 GPU 时，谁先谁后。先来先服务最简单，但对「我只是想快点看到第一个字」的交互往往不友好。调度器不是外围脚本，它就是把「必须跑很多轮」变成「可以持续服务」的那一层。
 
-三条路，只对比意图，不在本篇里判胜负：
+具体排队规则留给第 03 篇。
 
-| 策略 | 在修什么 | 代价 |
+### 两段活怎么安排
+
+对应约束 3。三条路，本篇只比意图，不断谁赢：
+
+| 做法 | 在修什么 | 你要付出的 |
 | --- | --- | --- |
-| 同卡混合 + 连续批处理 | 提高利用率 | prefill 干扰 decode |
-| Chunked prefill | 把长 prefill 切块，和 decode 拼成较稳定的 token budget | TTFT 与 TPOT 仍耦合 |
-| P/D 分离 | 两相分卡，分别满足 TTFT 与 TPOT | KV 要跨阶段搬运 |
+| 同一张卡上混着跑，但每轮都重新组队 | 尽量把 GPU 喂饱 | 处理 prompt 会拖慢正在吐词的人 |
+| 把长 prompt 切成小段，和吐词拼在同一轮里 | 避免一整段长 prompt 卡住所有人 | 「等第一个词」和「词间隔」仍然绑在一起 |
+| 两段放到不同的 GPU 上 | 两段可以分别满足各自的快慢要求 | 算完的 KV 要搬过去 |
 
-Chunked prefill（Sarathi-Serve、DeepSpeed-FastGen 的 splitfuse 同属这一族）利用 decode 算术强度低、GPU 还有空的事实，把一小块 prefill 捎上。它能避免「整段长 prompt 卡住所有 decode」，但两相仍在抢同一组 SM。DistServe 的问题意识比「吞吐更高」更准：应用往往**同时**有 TTFT 和 TPOT 的 SLO。吞吐高不等于 SLO 内的 goodput。把两相拆开后，并行策略也可以分别选：prefill 更吃算力，decode 更吃带宽和 KV。
+切小段，是利用「吐词时计算单元往往还有空」这一点，每次只捎上一段 prompt。拆到不同卡，是承认两段的忙闲相反，硬挤在一起会抢。吞吐高也不等于每个人都觉得快：你可能每秒吐出很多词，但一半用户的第一个词来得很晚。这个差别，第 04 篇再展开。
 
-集群怎么放置、KV 怎么搬、什么时候不该分离，留给第 04 篇。
+### 真正去算，以及如何接到用户
 
-### Executor 与 Serving：把一次 step 真正跑出去
+前面三块决定「算什么、为谁算、KV 放哪」。还缺两层：
 
-Executor 真正跑 fused kernel、FlashAttention 类算子，以及张量并行 / 流水线并行 / 专家并行。MoE 出现后，专家并行变成一等公民：不再只是「把同一层切到多卡」，还要把不同 token 送到不同专家。Sampler 和 structured output 发生在 logits 之后——温度、top-p、停用词、JSON / 工具调用的约束解码——看起来像后处理，但仍在每步关键路径上，第 06 篇再写。
+- **执行**：把一层层注意力和前馈真正跑在 GPU 上，包括把大模型切到多张卡（张量并行、流水线并行；MoE 还要按专家分）。采样（温度、top-p）、按 JSON 格式往外吐，发生在分数出来之后，看起来像收尾，但仍在每一步的关键路径上。
+- **对外服务**：脚本里循环调用 `generate`，和开一个服务让很多人同时连上来，不是同一件事。没有这一层，你可以自己测速度，但不能接用户。
 
-Serving 是离线 `LLM.generate` 与在线异步引擎的差别。vLLM 的解剖文章把层次写得很清楚：Engine Core 里是调度 + KV + 执行；外包一层才是 HTTP、多进程客户端、分布式路由。没有这一层，你仍然可以做离线吞吐测试，但不能接用户流量。
+以后你打开任何一套推理软件，都可以先填这四格，再看那些听起来很新的功能挂在哪一格上：
 
-读任何引擎文档时，先填这四格，再看高级特性：
+1. KV 怎么存？结束了能不能收回？相同前缀能不能共用？
+2. 每一轮谁被选进来？
+3. 处理 prompt 和吐新词，是挤在同一张卡、切成小段，还是拆开？
+4. 模型怎么放到 GPU 上？用户的请求从哪进、词从哪出？
 
-1. KV 怎么存？能否分页、共享前缀？
-2. 每个 step 谁被调度进来？
-3. Prefill / Decode 同卡、切块，还是分卡？
-4. 执行器如何并行？请求从哪进、token 从哪出？
+四格填得上，你就是在读系统设计，而不是在背产品名词。
 
-四格填得上，你就已经在读系统，而不是在背名词。
+进下一篇之前，丢掉三个容易有的印象：
 
-用 vLLM 的公开解剖文当一次练习：Engine Core 里能看到 Scheduler（waiting / running 队列）、KV cache manager（free block 池）、Model executor（paged attention kernel）。外层才是把离线 `LLM.generate` 变成在线服务的 client。chunked prefill、prefix cache、投机解码、P/D 分离被放在「高级特性」——它们都挂在这四件套上，而不是另起炉灶。SGLang 的差别主要会落在 KV 那一格（radix 前缀树）和调度对前缀命中的偏好；TensorRT-LLM 的差别更多落在 Executor 那一格（编译出来的 kernel 与 in-flight batching 的实现）。先填格，再比较，才比较得动。
+- **「缓存了 K/V 就不需要推理系统」。** 缓存只解决**一条**请求内部别重算。很多人同时来、长短不一、如何收回显存、如何共用前缀，仍然要人管。
+- **「一次处理的人越多越好」。** 吐词时，多人可以摊销读权重的成本，但人数被 KV 显存卡住。超过这个点，再加只会内存不够，或把数据赶到更慢的地方。
+- **「把两段拆开一定更快」。** 它修的是互相拖累。搬运 KV 很贵、请求都很短、或者一张卡本来就没喂饱时，拆开可能更亏。
 
-还有三个常见误读，值得在进第 02 篇之前丢掉：
+## 这个系列接下来讲什么
 
-- **「有 KV cache 就不需要推理系统」。** cache 只解决单条请求内部的重算。多请求、变长、回收、共享前缀，仍然要管理器。
-- **「batch 越大越好」。** decode 需要 batch 来摊销权重读取，但 batch 被 KV 显存卡住；超过这个点，再加大只会 OOM 或换入换出。
-- **「P/D 分离一定更快」。** 它修的是两相干扰和 SLO 耦合。KV 搬运贵、流量偏短 decode、或者单卡本来就喂不饱时，分离可能得不偿失。这正是第 04 篇要量化的问题。
-
-## 系列怎么往下读
-
-| 篇 | 主题 | 本篇已点名 |
+| 篇 | 主题 | 从本篇哪条线接下去 |
 | --- | --- | --- |
-| 01 | 架构 → 模块地图 | 本篇 |
-| 02 | KV：分页与前缀复用 | PagedAttention, prefix cache |
-| 03 | 调度：连续批处理与 chunked prefill | Orca, Sarathi-Serve |
-| 04 | Prefill / Decode 分离与 goodput | DistServe |
-| 05 | 并行：TP / PP / EP | MoE |
-| 06 | 采样、投机解码、结构化输出 | Sampler |
-| 07 | 量化与 kernel | FlashAttention |
+| 01 | 从生成式 Transformer 到模块地图 | 本篇 |
+| 02 | KV：分页与前缀共用 | 显存按 token 涨 |
+| 03 | 调度：每轮重新组队，以及把长 prompt 切段 | 一次请求很多轮 |
+| 04 | 把处理 prompt 和吐词拆开 | 两种活不要硬挤 |
+| 05 | 模型怎么放到多张卡上 | 执行 |
+| 06 | 采样、加速解码、按规定格式输出 | 分数出来之后 |
+| 07 | 低精度与底层算子 | 每个 token 有多贵 |
 
-本篇没有原机评测。公式可手算复现；Orca / vLLM / Sarathi / DistServe 的加速比都来自各自论文，硬件和 workload 不同，不能横比。若后续要「show, not tell」的数字，优先做三件事：玩具模型上无 cache 与有 cache 的墙钟对比；固定 `max_model_len` 下 KV 能撑的并发；同卡插入长 prefill 时在飞 decode 的 TPOT 变化。
+本篇没有上机跑速度。KV 公式可以自己带入层数和头数复现。后文若要数字，会单独说明实验设定。
 
-推理系统不是一张优化清单，是生成式 Transformer 的运算后果。下一篇从 KV 显存公式往下挖，直到分页为什么像操作系统。
+推理系统不是一份优化清单，是生成式 Transformer 的运算后果：必须逐步吐词，历史可以缓存，处理 prompt 和吐新词忙闲相反，真实请求又长短不一。下一篇从「每个 token 的 KV 到底占多少显存」往下挖。
 
 ## 参考
 
 1. Vaswani et al., *Attention Is All You Need*, 2017.
-2. Radford et al., GPT-2；实现里的 `past` 即为 KV cache。
-3. Yu et al., *Orca: A Distributed Serving System for Transformer-Based Generative Models*, OSDI 2022.
-4. Kwon et al., *Efficient Memory Management for Large Language Model Serving with PagedAttention*, SOSP 2023.
-5. Agrawal et al., *Taming Throughput-Latency Tradeoff in LLM Inference with Sarathi-Serve*, OSDI 2024.
-6. Zhong et al., *DistServe*, OSDI 2024.
-7. Gordić, [Inside vLLM: Anatomy of a High-Throughput LLM Inference System](https://vllm.ai/blog/2025-09-05-anatomy-of-vllm), 2025.
+2. Radford et al., GPT-2。实现里的 `past` 即 KV 缓存。
+3. Yu et al., *Orca*, OSDI 2022。按「每一轮前向」而不是按整次请求来调度。
+4. Kwon et al., *PagedAttention*, SOSP 2023。用分页的方式管理历史 Key/Value。
+5. Agrawal et al., *Sarathi-Serve*, OSDI 2024。把长 prompt 切段，减轻和吐词的互相拖累。
+6. Zhong et al., *DistServe*, OSDI 2024。把处理 prompt 和吐词放到不同设备上。

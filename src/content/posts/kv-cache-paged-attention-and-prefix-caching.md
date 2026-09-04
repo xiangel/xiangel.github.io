@@ -354,9 +354,15 @@ if __name__ == "__main__":
 
 > 完整含绘图的版本（4 张图）与本文一致，核心逻辑就是上面的 `PrefixCache`：**链式哈希 + LRU**。把 `experiment_*` 按文中描述补齐即可产出全部图表。
 
-## 附录 B：真机 vLLM 基准脚本（有 GPU 的读者）
+## 附录 B：真机 vLLM 基准（有 GPU 的读者）
 
-如果你有 GPU，可以用官方基准直接量出**真实 TTFT** 与命中率的差异：
+没有本地 GPU？点这个 Colab（免费 T4）即可一键跑真实 vLLM，量出 Prefix Caching 对 TTFT 的影响，复现实验 B1/B2：
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/xiangel/xiangel.github.io/blob/main/notebooks/kv-cache-vllm-benchmark.ipynb)
+
+Notebook 源码在仓库 [`notebooks/kv-cache-vllm-benchmark.ipynb`](https://github.com/xiangel/xiangel.github.io/blob/main/notebooks/kv-cache-vllm-benchmark.ipynb)。
+
+如果你有本地 GPU，也可以直接用官方服务量出**真实 TTFT** 与命中率的差异：
 
 ```bash
 # 1) 开启 prefix caching 起服务

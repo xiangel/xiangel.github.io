@@ -214,8 +214,6 @@ block hash_i = hash( hash_{i-1},  本块的 token,  额外key )
 
 ## 四、动手实验：无需 GPU 的可复现仿真
 
-> 这台写博客的机器**没有 GPU**，跑不了真实推理。但 PagedAttention / Prefix Caching 的**核心收益是可以用纯逻辑仿真复现的**——下面这段 Python（只依赖 `numpy` + `matplotlib`，确定性 `SEED=42`）复现了论文的几个关键结论。
-
 ### 实验 A：显存碎片——contiguous vs paged
 
 模拟真实的聊天长度分布（多数短、长尾），对比"连续预留 `max_model_len`"与"分页（block=16）"：

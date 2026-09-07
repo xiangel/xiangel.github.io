@@ -191,6 +191,28 @@ vLLM 是**块级哈希**；SGLang 则把 KV Cache 组织成一棵 **radix tree�
 | 共享结构 | 单层前导前缀（块对齐）          | 前导前缀 + 多级树状分叉（token 级） |
 | 强项     | 实现简单、块独立、易分配回收    | RAG/多级共享命中率更高   |
 
+### ChunkAttention：共享之后，如何在 Attention Kernel 里"高效复用"
+
+前面 vLLM / SGLang 解决的是"**KV 怎么共享、怎么省显存**"。但还有一个常被忽略的缝隙：**共享之后，attention kernel 真的高效利用了这份共享吗？** 传统实现里，即便前缀 KV 在显存里只存了一份，解码时每个请求仍会**各自把这段共享 KV 从显存读一遍**、各自跑一次 attention——访存被重复放大了。
+
+**ChunkAttention**（微软，ACL 2024）正盯着这个缝隙。它做两件事：
+
+1. **Prefix-Aware KV Cache（PAKV）**：把单块的 K/V 张量切成固定大小的 **chunk**（示例 chunk size = 256），组织成一棵**前缀树**。相同前缀的请求在树上**共用同一批 chunk**，前缀 KV 只存一份，后续按请求分叉出各自的私有尾块。
+
+![ChunkAttention 把共享前缀切成 chunk 存进前缀树，只存一份](/assets/posts/kv-cache/diagram-chunkattention-memory.png)
+
+> 显存账（论文示例）：`16 个 chunk × 256 = 4096` 的共享前缀只存一份，3 个请求各自 100 token 的私有尾巴另计，相比"每请求各存整段前缀"约省 **3×** 显存。
+
+2. **Two-Phase Partition（TPP）**：真正的新意在 **attention kernel**。解码时把自注意力拆成两个阶段：
+   - **Chunk-first（共享阶段）**：只处理被多个请求共享的 chunk。把这些请求的 query **batch 在一起**去和共享 chunk 做注意力——于是变成 **矩阵 × 矩阵**、能吃满 tensor core；用 **online softmax** 存下部分结果 `O^(C), m^(C), n^(C)`，分区之间无需同步。
+   - **Sequence-first（私有阶段）**：再逐请求处理各自的私有尾块（**向量 × 矩阵**），并把上一阶段的共享部分结果**合并**（online softmax）得到最终输出。
+
+![ChunkAttention 的 two-phase partition：共享 chunk 批量算一次，私有尾块逐请求算再合并](/assets/posts/kv-cache/diagram-chunkattention-twophase.png)
+
+关键收益是**数据局部性**：共享前缀的 KV 在 chunk-first 阶段**只从显存读一次**、被所有请求的 query 复用，而不是每请求各读一遍。论文报告：系统提示长度 1024–4096 时，自注意力 kernel 相比 SOTA 实现加速 **3.2–4.8×**。
+
+> **一句话定位**：vLLM / SGLang 回答"**KV 怎么共享**"，ChunkAttention 追问"**共享之后，怎么让 attention kernel 真正复用这份共享 KV**"——把"共享"从省显存延伸到了省访存、提升算力利用率。
+
 ## 四、动手实验：无需 GPU 的可复现仿真
 
 > 这台写博客的机器**没有 GPU**，跑不了真实推理。但 PagedAttention / Prefix Caching 的**核心收益是可以用纯逻辑仿真复现的**——下面这段 Python（只依赖 `numpy` + `matplotlib`，确定性 `SEED=42`）复现了论文的几个关键结论。真机 vLLM 基准脚本见文末附录。
@@ -275,12 +297,13 @@ vLLM 是**块级哈希**；SGLang 则把 KV Cache 组织成一棵 **radix tree�
 - **Prefix Caching** 建立在其上，让重复前缀**免于重算**；vLLM 用块级哈希、SGLang 用 radix tree，殊途同归。
 - 工程上最实用的一条：**静态内容前置、易变字段后置**，并盯紧命中率与显存水位。
 
-> **配图说明 · 原图出处**：本文所有示意图（block table 映射、prefill/decode、copy-on-write、prefix caching 哈希链、radix tree）均为**原创重绘**，仅在概念上对应下列论文与资料中的经典图示，未直接复制任何受版权保护的图片。想看**原始配图**，请查阅：
+> **配图说明 · 原图出处**：本文所有示意图（block table 映射、prefill/decode、copy-on-write、prefix caching 哈希链、radix tree、ChunkAttention 的 chunk 前缀树与 two-phase partition）均为**原创重绘**，仅在概念上对应下列论文与资料中的经典图示，未直接复制任何受版权保护的图片。想看**原始配图**，请查阅：
 >
 > - PagedAttention 原论文 Kwon et al., _Efficient Memory Management for LLM Serving with PagedAttention_（SOSP 2023）：[arXiv:2309.06180](https://arxiv.org/abs/2309.06180)（Fig. 3 KV cache 浪费、Fig. 6/7 block table 映射、Fig. 8 copy-on-write）。
 > - vLLM 官方博客 _vLLM: Easy, Fast, and Cheap LLM Serving with PagedAttention_：[blog.vllm.ai/2023/06/20/vllm.html](https://blog.vllm.ai/2023/06/20/vllm.html)（PagedAttention 动图与显存对比图）。
 > - vLLM 文档 _Automatic Prefix Caching_：[docs.vllm.ai](https://docs.vllm.ai/en/latest/design/prefix_caching.html)（块级哈希链示意）。
 > - SGLang 论文 Zheng et al., _SGLang: Efficient Execution of Structured Language Model Programs_（NeurIPS 2024）：[arXiv:2312.07104](https://arxiv.org/abs/2312.07104)（RadixAttention radix tree 与 cache-aware 调度图）。
+> - ChunkAttention 论文 Ye et al., _ChunkAttention: Efficient Self-Attention with Prefix-Aware KV Cache and Two-Phase Partition_（ACL 2024）：[arXiv:2402.15220](https://arxiv.org/abs/2402.15220)（Fig. 1 prefix-aware KV cache、Fig. 2 two-phase partition kernel）。
 
 ---
 

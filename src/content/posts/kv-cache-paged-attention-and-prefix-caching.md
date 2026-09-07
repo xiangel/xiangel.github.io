@@ -47,6 +47,8 @@ Attention(Q_t, K_1:t, V_1:t) = softmax( Q_t · K_1:tᵀ / √d ) · V_1:t
 | **Prefill** | 一次性并行处理整个 prompt        | 计算密集（算力） | TTFT（首 token 延迟） |
 | **Decode**  | 逐个生成 token，每步读整个 cache | 访存密集（带宽） | TPOT（每 token 延迟） |
 
+![Prefill 与 Decode 两阶段示意：Prefill 一次性并行填充 KV Cache，Decode 逐 token 读取不断增长的 KV Cache](/assets/posts/kv-cache/diagram-prefill-decode.png)
+
 记住这张表：**Prefix Caching 优化的是 Prefill/TTFT**，而 KV Cache 的显存压力主要来自 Decode 阶段不断增长的历史。
 
 KV Cache 有多大？粗略地：`Bytes ≈ 2(K和V) × 层数 × KV头数 × head维度 × token数 × dtype字节数`。
@@ -99,6 +101,8 @@ Seq A: [blk0][blk1][blk2]             [B0][B1][B2][B3][B4][B5]...
 block table(A): 0→B2, 1→B5, 2→B0 ─────┘─────────┘────┘   （非连续，零外部碎片）
 ```
 
+![PagedAttention 用 block table 把序列的逻辑块映射到显存池里任意位置的物理块](/assets/posts/kv-cache/diagram-block-table.png)
+
 每个序列有一张 **block table**，把"逻辑上连续"的块号，映射到显存池里**任意位置**的物理块。要增长就从空闲池再取一块，结束就还回去。于是：
 
 - 外部碎片 **归零**（所有块一样大，随便放）。
@@ -117,6 +121,8 @@ block table(A): 0→B2, 1→B5, 2→B0 ─────┘───────�
 > **类比**：就像 `fork()` 出子进程时，父子共享同一份内存页，**谁要写才复制那一页**（copy-on-write）。
 
 并行采样（`best_of=4`）或 beam search 时，多个候选**共享同一份前缀块**，只在各自**分叉、真正写入新 token**的地方才复制那一块。被淘汰的候选立刻减引用计数、归还块，零拷贝开销。
+
+![Copy-on-Write：两个候选共享前缀块，只在分叉写入处复制那一块](/assets/posts/kv-cache/diagram-cow.png)
 
 这个"共享前缀块"的能力，正是下一章 **Prefix Caching** 的地基。
 
@@ -145,6 +151,8 @@ block hash_i = hash( hash_{i-1},  本块的 token,  额外key )
                                       只需为"问题 B"新算
 ```
 
+![Prefix Caching：两个请求共享的前缀块哈希全部命中，只有末尾独特部分需要重算](/assets/posts/kv-cache/diagram-hash-chain.png)
+
 几个要点：
 
 - **块级、只缓存整块**：一个前缀如果只填了新块的一部分（不足 16 token），那半块**不会**被缓存。
@@ -166,6 +174,8 @@ vLLM 是**块级哈希**；SGLang 则把 KV Cache 组织成一棵 **radix tree�
           ┌──┘     └──┐
    "…问题1"          "…问题2"          ← 各自会话继续分叉
 ```
+
+![RadixAttention：把共享前缀组织成基数树，系统提示作为根节点被所有请求共享](/assets/posts/kv-cache/diagram-radix-tree.png)
 
 - 粒度是 **token 级**（页大小 = 1 token），边可以标注**变长**的 token 序列。
 - 用 **LRU 驱逐叶子**：系统提示这种根节点被每个请求访问，永远活着；一小时前某次对话的细节则作为叶子被淘汰。
@@ -264,6 +274,13 @@ vLLM 是**块级哈希**；SGLang 则把 KV Cache 组织成一棵 **radix tree�
 - **PagedAttention** 借操作系统的**分页 + copy-on-write**，把显存浪费从 60–80% 降到个位数，并提供"可共享物理块"这一关键抽象。
 - **Prefix Caching** 建立在其上，让重复前缀**免于重算**；vLLM 用块级哈希、SGLang 用 radix tree，殊途同归。
 - 工程上最实用的一条：**静态内容前置、易变字段后置**，并盯紧命中率与显存水位。
+
+> **配图说明 · 原图出处**：本文所有示意图（block table 映射、prefill/decode、copy-on-write、prefix caching 哈希链、radix tree）均为**原创重绘**，仅在概念上对应下列论文与资料中的经典图示，未直接复制任何受版权保护的图片。想看**原始配图**，请查阅：
+>
+> - PagedAttention 原论文 Kwon et al., _Efficient Memory Management for LLM Serving with PagedAttention_（SOSP 2023）：[arXiv:2309.06180](https://arxiv.org/abs/2309.06180)（Fig. 3 KV cache 浪费、Fig. 6/7 block table 映射、Fig. 8 copy-on-write）。
+> - vLLM 官方博客 _vLLM: Easy, Fast, and Cheap LLM Serving with PagedAttention_：[blog.vllm.ai/2023/06/20/vllm.html](https://blog.vllm.ai/2023/06/20/vllm.html)（PagedAttention 动图与显存对比图）。
+> - vLLM 文档 _Automatic Prefix Caching_：[docs.vllm.ai](https://docs.vllm.ai/en/latest/design/prefix_caching.html)（块级哈希链示意）。
+> - SGLang 论文 Zheng et al., _SGLang: Efficient Execution of Structured Language Model Programs_（NeurIPS 2024）：[arXiv:2312.07104](https://arxiv.org/abs/2312.07104)（RadixAttention radix tree 与 cache-aware 调度图）。
 
 ---
 

@@ -8,7 +8,7 @@ draft: false
 tags:
   - LLM
   - 推理系统
-  - vLLM
+  - KV-Cache
 description: 用操作系统的类比，把 LLM 推理里最吃显存的 KV Cache 讲清楚：PagedAttention 如何像虚拟内存一样管理显存，Prefix Caching 如何让重复的前缀不再重算。附一组无需 GPU、可复现的仿真实验与图表。
 ---
 
@@ -59,7 +59,7 @@ KV Cache 有多大？粗略地：`Bytes ≈ 2(K和V) × 层数 × KV头数 × he
 
 ### 老办法为什么浪费
 
-在 vLLM 之前，主流做法（FasterTransformer 一类）是给每个请求**预留一整块连续显存**，大小按 `max_model_len`（比如 2048）来算。问题是一个请求可能只生成 300 个 token，剩下的全是**空占着**的浪费。
+在 PagedAttention 出现之前，主流做法（FasterTransformer 一类）是给每个请求**预留一整块连续显存**，大小按 `max_model_len`（比如 2048）来算。问题是一个请求可能只生成 300 个 token，剩下的全是**空占着**的浪费。
 
 这会造成三种浪费：
 
@@ -108,11 +108,11 @@ block table(A): 0→B2, 1→B5, 2→B0 ─────┘───────�
 - 外部碎片 **归零**（所有块一样大，随便放）。
 - 内部碎片最多只剩**一个半满的尾块**（≤ 15 个 token 的浪费）。
 
-**block size 的取舍**（等价于 OS 选页大小）：块太小，碎片少但元数据/索引开销大；块太大，反之且尾块浪费多。vLLM 默认 **16 token**，是 A100/H100 上的经验最优。
+**block size 的取舍**（等价于 OS 选页大小）：块太小，碎片少但元数据/索引开销大；块太大，反之且尾块浪费多。常见实现取 **16 token** 左右，是 A100/H100 上的经验最优。
 
 ### 一个绕不开的工程细节：定制 kernel
 
-标准的 FlashAttention kernel 假设 K/V 在显存里是**连续**的。PagedAttention 的块是散落的，所以 vLLM 必须写**定制 CUDA kernel**：按 block table 去各个物理块**gather**（收集）K/V。关键洞察是——**逐序列看是分散的，但逐块看是连续的**（一块内 16 个 token 紧凑排列），所以这层间接寻址的开销在 GPU 上几乎可忽略。
+标准的 FlashAttention kernel 假设 K/V 在显存里是**连续**的。PagedAttention 的块是散落的，所以必须写**定制 CUDA kernel**：按 block table 去各个物理块**gather**（收集）K/V。关键洞察是——**逐序列看是分散的，但逐块看是连续的**（一块内 16 个 token 紧凑排列），所以这层间接寻址的开销在 GPU 上几乎可忽略。
 
 ### 白捡的红利：Copy-on-Write
 
@@ -132,14 +132,14 @@ block table(A): 0→B2, 1→B5, 2→B0 ─────┘───────�
 
 Prefix Caching 的思想一句话：**把已经算好的前缀 KV 块留着，下个请求前缀相同就直接复用，跳过重算。** 它几乎是"免费的午餐"，而且**不改变模型输出**。
 
-### vLLM 的做法：块级哈希链
+### 实现思路一：块级哈希链（chained block hashing）
 
-vLLM 用**哈希**来判断"这一块是否已经算过"。每个块的哈希是**链式**的（类似 Merkle chain）：
+一种常见做法是用**哈希**来判断"这一块是否已经算过"。每个块的哈希是**链式**的（类似 Merkle chain）：
 
 ```text
 block hash_i = hash( hash_{i-1},  本块的 token,  额外key )
                         ▲              ▲             ▲
-                     父块哈希       内容精确匹配    LoRA id / cache_salt ...
+                     父块哈希       内容精确匹配    LoRA id / 隔离用 salt ...
 ```
 
 ```text
@@ -155,16 +155,15 @@ block hash_i = hash( hash_{i-1},  本块的 token,  额外key )
 
 几个要点：
 
-- **块级、只缓存整块**：一个前缀如果只填了新块的一部分（不足 16 token），那半块**不会**被缓存。
+- **块级、只缓存整块**：一个前缀如果只填了新块的一部分（不足一个块，如 16 token），那半块**不会**被缓存。
 - **精确匹配**：哈希链意味着命中要求**逐 token 完全一致**，而不是"语义相似"。第一个对不上的块，就是重算的起点。
-- **默认开启**：vLLM V1 引擎默认 `enable_prefix_caching=True`。
-- **哈希算法可选**：`sha256`（v0.11 起默认，防碰撞）、`sha256_cbor`（跨版本/跨语言可复现，供分布式 KV 索引用）、`xxhash`（更快但非密码学，多租户下有碰撞与信息泄漏风险）。
-- **多租户隔离**：给请求带上 `cache_salt`，它会被拌进首块哈希，只有相同 salt 的请求才能互相复用——同时也能防"基于时延差异"的侧信道攻击。
+- **哈希算法的权衡**：用密码学哈希（如 SHA-256）可防碰撞、可跨进程复现，代价是稍慢；用非密码学快哈希更快，但多租户下有碰撞与信息泄漏风险。
+- **多租户隔离**：给请求前缀拌入一个 **salt**（混进首块哈希），只有相同 salt 的请求才能互相复用——既做租户隔离，也能防"基于时延差异"的侧信道攻击。
 - **驱逐**：空闲块按 **LRU** 回收；正在被引用的块（引用计数 > 0）不会被驱逐；请求结束时按"尾块先驱逐"的逆序归还（尾块哈希了最多 token，最不可能被别人复用）。
 
-### 换个数据结构：SGLang 的 RadixAttention
+### 实现思路二：基数树（radix tree / RadixAttention）
 
-vLLM 是**块级哈希**；SGLang 则把 KV Cache 组织成一棵 **radix tree（基数树 / 压缩前缀树）**：
+除了块级哈希，另一类做法把 KV Cache 组织成一棵 **radix tree（基数树 / 压缩前缀树）**：
 
 ```text
               (root)
@@ -184,16 +183,16 @@ vLLM 是**块级哈希**；SGLang 则把 KV Cache 组织成一棵 **radix tree�
 
 一句话对比：
 
-| 维度     | vLLM 块级哈希                   | SGLang RadixAttention    |
+| 维度     | 块级哈希链                       | 基数树（RadixAttention）  |
 | -------- | ------------------------------- | ------------------------ |
 | 数据结构 | 全局哈希表 + 链式块哈希         | radix tree               |
-| 粒度     | 固定块（默认 16 token），仅整块 | token 级                 |
+| 粒度     | 固定块（如 16 token），仅整块   | token 级                 |
 | 共享结构 | 单层前导前缀（块对齐）          | 前导前缀 + 多级树状分叉（token 级） |
 | 强项     | 实现简单、块独立、易分配回收    | RAG/多级共享命中率更高   |
 
 ### ChunkAttention：共享之后，如何在 Attention Kernel 里"高效复用"
 
-前面 vLLM / SGLang 解决的是"**KV 怎么共享、怎么省显存**"。但还有一个常被忽略的缝隙：**共享之后，attention kernel 真的高效利用了这份共享吗？** 传统实现里，即便前缀 KV 在显存里只存了一份，解码时每个请求仍会**各自把这段共享 KV 从显存读一遍**、各自跑一次 attention——访存被重复放大了。
+前面两种做法（块级哈希、基数树）解决的是"**KV 怎么共享、怎么省显存**"。但还有一个常被忽略的缝隙：**共享之后，attention kernel 真的高效利用了这份共享吗？** 传统实现里，即便前缀 KV 在显存里只存了一份，解码时每个请求仍会**各自把这段共享 KV 从显存读一遍**、各自跑一次 attention——访存被重复放大了。
 
 **ChunkAttention**（微软，ACL 2024）正盯着这个缝隙。它做两件事：
 
@@ -211,11 +210,11 @@ vLLM 是**块级哈希**；SGLang 则把 KV Cache 组织成一棵 **radix tree�
 
 关键收益是**数据局部性**：共享前缀的 KV 在 chunk-first 阶段**只从显存读一次**、被所有请求的 query 复用，而不是每请求各读一遍。论文报告：系统提示长度 1024–4096 时，自注意力 kernel 相比 SOTA 实现加速 **3.2–4.8×**。
 
-> **一句话定位**：vLLM / SGLang 回答"**KV 怎么共享**"，ChunkAttention 追问"**共享之后，怎么让 attention kernel 真正复用这份共享 KV**"——把"共享"从省显存延伸到了省访存、提升算力利用率。
+> **一句话定位**：前面的做法回答了"**KV 怎么共享**"，ChunkAttention 追问"**共享之后，怎么让 attention kernel 真正复用这份共享 KV**"——把"共享"从省显存延伸到了省访存、提升算力利用率。
 
 ## 四、动手实验：无需 GPU 的可复现仿真
 
-> 这台写博客的机器**没有 GPU**，跑不了真实推理。但 PagedAttention / Prefix Caching 的**核心收益是可以用纯逻辑仿真复现的**——下面这段 Python（只依赖 `numpy` + `matplotlib`，确定性 `SEED=42`）复现了论文的几个关键结论。真机 vLLM 基准脚本见文末附录。
+> 这台写博客的机器**没有 GPU**，跑不了真实推理。但 PagedAttention / Prefix Caching 的**核心收益是可以用纯逻辑仿真复现的**——下面这段 Python（只依赖 `numpy` + `matplotlib`，确定性 `SEED=42`）复现了论文的几个关键结论。
 
 ### 实验 A：显存碎片——contiguous vs paged
 
@@ -255,17 +254,17 @@ vLLM 是**块级哈希**；SGLang 则把 KV Cache 组织成一棵 **radix tree�
 
 ![多租户下命中率随缓存容量的变化](/assets/posts/kv-cache/prefix-eviction.png)
 
-一手结果：缓存太小（装不下所有租户前缀，需 256 块）时，前缀块在被复用前就被 LRU 挤掉，命中率从结构上限 **80%** 一路**崩到接近 0**。这解释了为什么生产里 `gpu_cache_usage_perc` 逼近 1.0 时，`gpu_prefix_cache_hit_rate` 会莫名很低——**不是模板不对，是显存被榨干了**。
+一手结果：缓存太小（装不下所有租户前缀，需 256 块）时，前缀块在被复用前就被 LRU 挤掉，命中率从结构上限 **80%** 一路**崩到接近 0**。这解释了为什么生产里**显存占用逼近满载**时，前缀命中率会莫名很低——**不是模板不对，是显存被榨干了**。
 
 ### 生产调优清单（结合上面的实验）
 
 命中率低时，先做**三连问**（排障决策树）：
 
 1. 前缀是不是在**第一个 block 边界之前**就分叉了？（→ 实验 B2：调整模板顺序、把系统提示长度对齐 `block_size`，避免末块半满永不缓存）
-2. 是不是**显存压力**把共享块驱逐了？（→ 实验 B3：看 `gpu_cache_usage_perc` 是否逼近 1.0）
+2. 是不是**显存压力**把共享块驱逐了？（→ 实验 B3：看**显存占用**是否逼近满载）
 3. 还是这本就是 **decode-bound** 的活，缓存根本不是瓶颈？（→ 看 completion/prompt token 比例）
 
-关键指标：`vllm:prefix_cache_queries` / `vllm:prefix_cache_hits`、`gpu_prefix_cache_hit_rate`、`gpu_cache_usage_perc`。常用参数：`--enable-prefix-caching`、`gpu_memory_utilization ≈ 0.85–0.92`、突发流量下 `--preemption-mode recompute` 通常比 `swap` 更稳。
+盯住两个信号：**前缀缓存命中率**与**显存占用率**。经验上给显存留一点余量（别逼近满载），突发流量下优先用**重算（recompute）**而非**换出（swap）**来腾显存，通常更稳。
 
 ## 五、和商用 API 的 Prompt Caching 对照
 
@@ -278,13 +277,13 @@ vLLM 是**块级哈希**；SGLang 则把 KV Cache 组织成一棵 **radix tree�
 | 折扣     | 缓存读约 **5 折**                                    | 缓存读 **9 折**（付 10%）                                         |
 | 写入成本 | GPT-5.6 起写入计 **1.25×**                           | 写入 25%（5 分钟）/ 100%（1 小时）溢价                            |
 
-结论：**原理相同，控制权不同**。自托管（vLLM / SGLang）可以细粒度掌控与观测；商用 API 则是"开箱即用但不可调"。但那条铁律**到处适用**：想吃到缓存红利，就把 prompt 里稳定的部分尽量前置、稳定。
+结论：**原理相同，控制权不同**。自托管引擎可以细粒度掌控与观测；商用 API 则是"开箱即用但不可调"。但那条铁律**到处适用**：想吃到缓存红利，就把 prompt 里稳定的部分尽量前置、稳定。
 
 ## 六、延伸阅读（本文未展开的进阶话题）
 
 这些方向能进一步压榨 KV Cache，留给后续文章或读者自行深入：
 
-- **RadixAttention（SGLang）**：本文点到为止，其 token 级基数树 + cache-aware 调度值得单独一篇。
+- **cache-aware 调度**：在基数树之上，按"最长公共前缀优先"排序等待队列，进一步抬高命中率，值得单独一篇。
 - **MLA（Multi-head Latent Attention，DeepSeek）**：把 KV 压成低秩潜向量，从"架构层"直接缩小 KV Cache。
 - **KV 量化**：`FP8 / INT8` KV Cache，用精度换一半甚至四分之一的显存。
 - **Token 驱逐 / 稀疏**：`H2O`、`SnapKV` 等，只保留"重要"的历史 token。
@@ -294,14 +293,12 @@ vLLM 是**块级哈希**；SGLang 则把 KV Cache 组织成一棵 **radix tree�
 
 - **KV Cache** 是自回归推理的记忆，也是长上下文/高并发的显存大户。
 - **PagedAttention** 借操作系统的**分页 + copy-on-write**，把显存浪费从 60–80% 降到个位数，并提供"可共享物理块"这一关键抽象。
-- **Prefix Caching** 建立在其上，让重复前缀**免于重算**；vLLM 用块级哈希、SGLang 用 radix tree，殊途同归。
+- **Prefix Caching** 建立在其上，让重复前缀**免于重算**；块级哈希与基数树是两种常见组织方式，殊途同归。
 - 工程上最实用的一条：**静态内容前置、易变字段后置**，并盯紧命中率与显存水位。
 
 > **配图说明 · 原图出处**：本文所有示意图（block table 映射、prefill/decode、copy-on-write、prefix caching 哈希链、radix tree、ChunkAttention 的 chunk 前缀树与 two-phase partition）均为**原创重绘**，仅在概念上对应下列论文与资料中的经典图示，未直接复制任何受版权保护的图片。想看**原始配图**，请查阅：
 >
 > - PagedAttention 原论文 Kwon et al., _Efficient Memory Management for LLM Serving with PagedAttention_（SOSP 2023）：[arXiv:2309.06180](https://arxiv.org/abs/2309.06180)（Fig. 3 KV cache 浪费、Fig. 6/7 block table 映射、Fig. 8 copy-on-write）。
-> - vLLM 官方博客 _vLLM: Easy, Fast, and Cheap LLM Serving with PagedAttention_：[blog.vllm.ai/2023/06/20/vllm.html](https://blog.vllm.ai/2023/06/20/vllm.html)（PagedAttention 动图与显存对比图）。
-> - vLLM 文档 _Automatic Prefix Caching_：[docs.vllm.ai](https://docs.vllm.ai/en/latest/design/prefix_caching.html)（块级哈希链示意）。
 > - SGLang 论文 Zheng et al., _SGLang: Efficient Execution of Structured Language Model Programs_（NeurIPS 2024）：[arXiv:2312.07104](https://arxiv.org/abs/2312.07104)（RadixAttention radix tree 与 cache-aware 调度图）。
 > - ChunkAttention 论文 Ye et al., _ChunkAttention: Efficient Self-Attention with Prefix-Aware KV Cache and Two-Phase Partition_（ACL 2024）：[arXiv:2402.15220](https://arxiv.org/abs/2402.15220)（Fig. 1 prefix-aware KV cache、Fig. 2 two-phase partition kernel）。
 
@@ -323,7 +320,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 SEED = 42
-BLOCK = 16  # tokens per KV block (vLLM default)
+BLOCK = 16  # tokens per KV block
 OUT = os.environ.get("OUT_DIR", "./figs")
 os.makedirs(OUT, exist_ok=True)
 
@@ -393,27 +390,3 @@ if __name__ == "__main__":
 ```
 
 > 完整含绘图的版本（4 张图）与本文一致，核心逻辑就是上面的 `PrefixCache`：**链式哈希 + LRU**。把 `experiment_*` 按文中描述补齐即可产出全部图表。
-
-## 附录 B：真机 vLLM 基准（有 GPU 的读者）
-
-没有本地 GPU？点这个 Colab（免费 T4）即可一键跑真实 vLLM，量出 Prefix Caching 对 TTFT 的影响，复现实验 B1/B2：
-
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/xiangel/xiangel.github.io/blob/main/notebooks/kv-cache-vllm-benchmark.ipynb)
-
-Notebook 源码在仓库 [`notebooks/kv-cache-vllm-benchmark.ipynb`](https://github.com/xiangel/xiangel.github.io/blob/main/notebooks/kv-cache-vllm-benchmark.ipynb)。
-
-如果你有本地 GPU，也可以直接用官方服务量出**真实 TTFT** 与命中率的差异：
-
-```bash
-# 1) 开启 prefix caching 起服务
-vllm serve Qwen/Qwen2.5-7B-Instruct \
-  --enable-prefix-caching \
-  --gpu-memory-utilization 0.90 \
-  --port 8000
-
-# 2) 构造"共享系统提示 + 变化问题"的请求，对比首/次请求 TTFT
-#    第二次相同前缀应显著更快；并在 /metrics 里看命中率
-curl -s localhost:8000/metrics | grep -E 'prefix_cache_(queries|hits)|gpu_prefix_cache_hit_rate'
-```
-
-对照实验：把上面同一段脚本，改成 `--no-enable-prefix-caching` 再跑一遍，比较 `TTFT p50/p95`。你会看到与**实验 B1/B2** 一致的趋势——共享前缀越多、越靠前，收益越大。

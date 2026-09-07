@@ -1,7 +1,7 @@
 ---
 author: xiangel
 pubDatetime: 2026-09-04T02:30:00Z
-title: "KV Cache 详解：PagedAttention 和 ChunkAttention"
+title: "KV Cache 详解：从 PagedAttention 到 Prefix Caching"
 slug: kv-cache-paged-attention-and-prefix-caching
 featured: true
 draft: false

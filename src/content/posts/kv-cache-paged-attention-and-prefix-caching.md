@@ -271,12 +271,6 @@ block hash_i = hash( hash_{i-1},  本块的 token,  额外key )
 - **Prefix Caching** 建立在其上，让重复前缀**免于重算**；块级哈希与基数树是两种常见组织方式，殊途同归。
 - 由哈希链原理直接得到的一条规律：**静态内容前置、易变字段后置**，才能让前缀稳定命中。
 
-> **配图说明 · 原图出处**：本文所有示意图（block table 映射、prefill/decode、copy-on-write、prefix caching 哈希链、radix tree、ChunkAttention 的 chunk 前缀树与 two-phase partition）均为**原创重绘**，仅在概念上对应下列论文与资料中的经典图示，未直接复制任何受版权保护的图片。想看**原始配图**，请查阅：
->
-> - PagedAttention 原论文 Kwon et al., _Efficient Memory Management for LLM Serving with PagedAttention_（SOSP 2023）：[arXiv:2309.06180](https://arxiv.org/abs/2309.06180)（Fig. 3 KV cache 浪费、Fig. 6/7 block table 映射、Fig. 8 copy-on-write）。
-> - SGLang 论文 Zheng et al., _SGLang: Efficient Execution of Structured Language Model Programs_（NeurIPS 2024）：[arXiv:2312.07104](https://arxiv.org/abs/2312.07104)（RadixAttention radix tree 与 cache-aware 调度图）。
-> - ChunkAttention 论文 Ye et al., _ChunkAttention: Efficient Self-Attention with Prefix-Aware KV Cache and Two-Phase Partition_（ACL 2024）：[arXiv:2402.15220](https://arxiv.org/abs/2402.15220)（Fig. 1 prefix-aware KV cache、Fig. 2 two-phase partition kernel）。
-
 ---
 
 ## 附录 A：完整仿真脚本

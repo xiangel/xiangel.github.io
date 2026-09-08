@@ -1,7 +1,7 @@
 ---
 author: xiangel
 pubDatetime: 2026-09-04T02:30:00Z
-title: "KV Cache 详解：从 PagedAttention 到 Prefix Caching"
+title: "KV Cache 详解：从 PagedAttention 到 ChunkAttention"
 slug: kv-cache-paged-attention-and-prefix-caching
 featured: true
 draft: false
@@ -9,7 +9,7 @@ tags:
   - LLM
   - 推理系统
   - KV-Cache
-description: 用操作系统的类比，把 LLM 推理里最吃显存的 KV Cache 讲清楚：PagedAttention 如何像虚拟内存一样管理显存，Prefix Caching 如何让重复的前缀不再重算。
+description: 从 KV Cache 的瓶颈讲起，沿着"发现问题 → 引入优化"的主线，依次拆解 PagedAttention、Prefix Caching 与 ChunkAttention 三种优化，用操作系统类比把每一步讲清楚。
 ---
 
 如果你自己部署过大模型，多半遇到过两件怪事：
@@ -17,16 +17,17 @@ description: 用操作系统的类比，把 LLM 推理里最吃显存的 KV Cach
 1. 模型权重明明放得下，可上下文一长、并发一高，显存立刻 **OOM**。
 2. 第二次问一个相似的问题，"首字"（首个 token）明显更快就蹦出来了。
 
-这两件事背后，是同一个主角：**KV Cache**。它是自回归推理的"记忆"，也是长上下文、高并发场景下最贵的那块显存。这篇文章用一条主线把它讲透——
+这两件事背后，是同一个主角：**KV Cache**。它是自回归推理的"记忆"，也是长上下文、高并发场景下最贵的那块显存。这篇文章从 KV Cache 讲起，沿着"**每暴露一个问题，就引入一种优化**"的主线，一步步走到今天几种关键的 Attention 优化：
 
-- **KV Cache 怎么才放得下？** → `PagedAttention`
-- **重复的前缀能不能不重算？** → `Prefix Caching`
+- **问题一：KV Cache 太大，显存放不下** → `PagedAttention`（把显存当虚拟内存来管）
+- **问题二：相同的前缀被反复重算** → `Prefix Caching`（哈希链 / RadixAttention 复用前缀）
+- **问题三：前缀虽已共享，kernel 却仍在重复读** → `ChunkAttention`（在 attention kernel 里真正复用共享 KV）
 
-全程我会用**操作系统**做类比（这也是 PagedAttention 论文的灵感来源），把每一个结论讲清楚。
+全程我会用**操作系统**做类比（这也是 PagedAttention 论文的灵感来源），把每一步的"问题 → 思路 → 效果"讲清楚。
 
 ## Table of contents
 
-## 一、先搞懂 KV Cache 是什么
+## 一、从 KV Cache 说起：它是什么、为什么贵
 
 Transformer 生成文本是**逐 token**的。生成第 t 个 token 时，它的 Query 要和前面**所有** token 的 Key / Value 做注意力：
 
@@ -55,7 +56,7 @@ KV Cache 有多大？粗略地：`Bytes ≈ 2(K和V) × 层数 × KV头数 × he
 
 它随 **序列长度、层数、KV 头数** 线性增长。这也是为什么 `GQA`（Grouped-Query Attention）、`MQA`、`MLA` 这些"减少 KV 头"的技巧如此重要——它们直接砍掉 KV Cache 的体积。但即便压缩过，KV Cache 依然是长上下文下的显存大户，于是就有了下一个问题：**这么大的东西，到底该怎么在显存里摆放？**
 
-## 二、PagedAttention：把 KV Cache 当"虚拟内存"来管
+## 二、第一个问题：显存放不下 —— PagedAttention
 
 ### 老办法为什么浪费
 
@@ -126,7 +127,7 @@ block table(A): 0→B2, 1→B5, 2→B0 ─────┘───────�
 
 这个"共享前缀块"的能力，正是下一章 **Prefix Caching** 的地基。
 
-## 三、Prefix Caching：重复的前缀，凭什么算两遍？
+## 三、第二个问题：相同前缀反复重算 —— Prefix Caching
 
 真实流量里，**前缀高度重复**：同一个系统提示、同一批 few-shot 示例、RAG 里同一份检索文档、多轮对话里不断累积的历史……如果每个请求都把这些**从头 prefill 一遍**，纯属浪费。
 
@@ -190,7 +191,7 @@ block hash_i = hash( hash_{i-1},  本块的 token,  额外key )
 | 共享结构 | 单层前导前缀（块对齐）          | 前导前缀 + 多级树状分叉（token 级） |
 | 强项     | 实现简单、块独立、易分配回收    | RAG/多级共享命中率更高   |
 
-### ChunkAttention：共享之后，如何在 Attention Kernel 里"高效复用"
+## 四、第三个问题：共享了，kernel 却还在重复读 —— ChunkAttention
 
 前面两种做法（块级哈希、基数树）解决的是"**KV 怎么共享、怎么省显存**"。但还有一个常被忽略的缝隙：**共享之后，attention kernel 真的高效利用了这份共享吗？** 传统实现里，即便前缀 KV 在显存里只存了一份，解码时每个请求仍会**各自把这段共享 KV 从显存读一遍**、各自跑一次 attention——访存被重复放大了。
 
@@ -212,7 +213,7 @@ block hash_i = hash( hash_{i-1},  本块的 token,  额外key )
 
 > **一句话定位**：前面的做法回答了"**KV 怎么共享**"，ChunkAttention 追问"**共享之后，怎么让 attention kernel 真正复用这份共享 KV**"——把"共享"从省显存延伸到了省访存、提升算力利用率。
 
-## 四、延伸阅读（本文未展开的进阶话题）
+## 五、延伸阅读（本文未展开的进阶话题）
 
 这些方向能进一步压榨 KV Cache，留给后续文章或读者自行深入：
 
@@ -222,9 +223,12 @@ block hash_i = hash( hash_{i-1},  本块的 token,  额外key )
 - **Token 驱逐 / 稀疏**：`H2O`、`SnapKV` 等，只保留"重要"的历史 token。
 - **分布式 KV 与 PD 分离**：`LMCache` + `Mooncake` 把多节点内存聚合成共享 KV 池，配合 prefill/decode 分离做**跨实例前缀共享**。
 
-## 五、总结
+## 六、总结
 
-- **KV Cache** 是自回归推理的记忆，也是长上下文/高并发的显存大户。
-- **PagedAttention** 借操作系统的**分页 + copy-on-write**，把显存浪费从 60–80% 降到个位数，并提供"可共享物理块"这一关键抽象。
-- **Prefix Caching** 建立在其上，让重复前缀**免于重算**；块级哈希与基数树是两种常见组织方式，殊途同归。
-- 由哈希链原理直接得到的一条规律：**静态内容前置、易变字段后置**，才能让前缀稳定命中。
+一条主线，三次"发现问题 → 引入优化"：
+
+- **起点 · KV Cache**：自回归推理的记忆，也是长上下文/高并发的显存大户——一切优化的源头。
+- **问题一"放不下" → PagedAttention**：借操作系统的**分页 + copy-on-write**，把显存浪费从 60–80% 降到个位数，并提供"可共享物理块"这一关键抽象。
+- **问题二"重复算" → Prefix Caching**：在共享抽象之上，让重复前缀**免于重算**；块级哈希链与基数树（RadixAttention）是两种常见组织方式。
+- **问题三"重复读" → ChunkAttention**：把"共享"从省显存延伸到省访存，在 attention kernel 里让共享前缀只读一次、被多请求 query 复用。
+- 一条贯穿始终的工程规律：**静态内容前置、易变字段后置**，才能让前缀稳定命中。

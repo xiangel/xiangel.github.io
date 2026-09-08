@@ -9,7 +9,7 @@ tags:
   - LLM
   - 推理系统
   - KV-Cache
-description: 用操作系统的类比，把 LLM 推理里最吃显存的 KV Cache 讲清楚：PagedAttention 如何像虚拟内存一样管理显存，Prefix Caching 如何让重复的前缀不再重算。附一组无需 GPU、可复现的仿真实验与图表。
+description: 用操作系统的类比，把 LLM 推理里最吃显存的 KV Cache 讲清楚：PagedAttention 如何像虚拟内存一样管理显存，Prefix Caching 如何让重复的前缀不再重算。
 ---
 
 如果你自己部署过大模型，多半遇到过两件怪事：
@@ -22,7 +22,7 @@ description: 用操作系统的类比，把 LLM 推理里最吃显存的 KV Cach
 - **KV Cache 怎么才放得下？** → `PagedAttention`
 - **重复的前缀能不能不重算？** → `Prefix Caching`
 
-全程我会用**操作系统**做类比（这也是 PagedAttention 论文的灵感来源），并在最后给出一组**无需 GPU、可复现**的仿真实验，用一手数据印证每一个结论。
+全程我会用**操作系统**做类比（这也是 PagedAttention 论文的灵感来源），把每一个结论讲清楚。
 
 ## Table of contents
 
@@ -212,49 +212,7 @@ block hash_i = hash( hash_{i-1},  本块的 token,  额外key )
 
 > **一句话定位**：前面的做法回答了"**KV 怎么共享**"，ChunkAttention 追问"**共享之后，怎么让 attention kernel 真正复用这份共享 KV**"——把"共享"从省显存延伸到了省访存、提升算力利用率。
 
-## 四、动手实验：无需 GPU 的可复现仿真
-
-### 实验 A：显存碎片——contiguous vs paged
-
-模拟真实的聊天长度分布（多数短、长尾），对比"连续预留 `max_model_len`"与"分页（block=16）"：
-
-![Contiguous vs PagedAttention 的显存浪费与并发容量](/assets/posts/kv-cache/fragmentation.png)
-
-一手结果（`mean seq length ≈ 358`，`max_model_len = 2048`）：
-
-- 连续预留浪费 **82.5%**，同样显存预算只能装 **97** 个并发序列；
-- 分页（block=16）浪费仅 **2.0%**，能装 **546** 个——**5.6× 的容量提升**。
-
-这与论文"旧系统浪费 60–80%、PagedAttention 把浪费降到 <4%"完全吻合。（注意：容量提升 ≠ 吞吐提升；论文的端到端吞吐是 2–4×，因为吞吐还受算力/调度制约。）
-
-### 实验 B1：省下的 Prefill 随共享前缀比例线性增长
-
-![Prefill 省下的计算量随共享前缀比例变化](/assets/posts/kv-cache/prefix-saving-vs-ratio.png)
-
-共享前缀占 prompt 的比例越高，省下的 prefill 计算就越多，几乎贴着理想直线——因为省掉的正是那段共享前缀的 prefill。
-
-### 实验 B2：同样的内容，"易变字段"放头还是放尾，天壤之别
-
-这是生产里**最容易踩的坑**。假设 prompt 里有个每次都变的字段（时间戳 / 请求 ID，仅 5 个 token）：
-
-![易变字段放头 vs 放尾对命中率和 TTFT 的影响](/assets/posts/kv-cache/prefix-head-vs-tail.png)
-
-一手结果：
-
-- **易变字段放在开头** → 第一个块每次都不同 → 哈希链从第 0 块就断了 → 命中率 **0%**，TTFT 和没缓存一样。
-- **同样的字段挪到末尾** → 共享前缀全部命中 → 命中率 **78%**，TTFT 代理值从 1024 → **224**。
-
-> **一句话铁律：静态内容前置，易变字段后置。** 这跟社区实测（某租户把易变字段从头挪到尾，命中率 0.3% → 87%）是同一个故事。
-
-### 实验 B3：显存不够时，LRU 会把共享块挤掉，命中率随之崩塌
-
-用一个真实的**块级链式哈希 + LRU 驱逐**缓存，模拟 8 个租户（8 个不同系统提示）竞争：
-
-![多租户下命中率随缓存容量的变化](/assets/posts/kv-cache/prefix-eviction.png)
-
-一手结果：缓存太小（装不下所有租户前缀，需 256 块）时，前缀块在被复用前就被 LRU 挤掉，命中率从结构上限 **80%** 一路**崩到接近 0**。这解释了为什么生产里**显存占用逼近满载**时，前缀命中率会莫名很低——**不是模板不对，是显存被榨干了**。
-
-## 五、延伸阅读（本文未展开的进阶话题）
+## 四、延伸阅读（本文未展开的进阶话题）
 
 这些方向能进一步压榨 KV Cache，留给后续文章或读者自行深入：
 
@@ -264,7 +222,7 @@ block hash_i = hash( hash_{i-1},  本块的 token,  额外key )
 - **Token 驱逐 / 稀疏**：`H2O`、`SnapKV` 等，只保留"重要"的历史 token。
 - **分布式 KV 与 PD 分离**：`LMCache` + `Mooncake` 把多节点内存聚合成共享 KV 池，配合 prefill/decode 分离做**跨实例前缀共享**。
 
-## 六、总结
+## 五、总结
 
 - **KV Cache** 是自回归推理的记忆，也是长上下文/高并发的显存大户。
 - **PagedAttention** 借操作系统的**分页 + copy-on-write**，把显存浪费从 60–80% 降到个位数，并提供"可共享物理块"这一关键抽象。

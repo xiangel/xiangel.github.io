@@ -7,6 +7,7 @@
 - 精致排版，明暗主题切换
 - Markdown 写文章，Git 版本管理
 - Pagefind 全文搜索
+- 不蒜子访问量统计（页脚全站 + 文章页阅读数）
 - GitHub Actions 自动部署
 
 ## 本地开发
@@ -50,3 +51,28 @@ git push
 ## 首次部署
 
 在 GitHub 仓库 **Settings → Pages** 中，将 Source 设置为 **GitHub Actions**。
+
+## Giscus 评论
+
+文章页已集成 [Giscus](https://giscus.app/) 评论（基于 GitHub Discussions）。
+
+### 一次性配置
+
+1. 打开仓库 **Settings → General → Features**，勾选 **Discussions**
+2. 安装 [Giscus GitHub App](https://github.com/apps/giscus)
+3. 在 Discussions 中确认存在 **Announcements** 分类（没有则新建）
+4. 本地运行获取 categoryId：
+
+```bash
+npm run giscus:setup
+```
+
+5. 将输出的 `categoryId` 填入 `astro-paper.config.ts`：
+
+```ts
+giscus: {
+  categoryId: "DIC_kwDOMu995s4XXXXXX",
+}
+```
+
+或在 GitHub 仓库 **Settings → Secrets and variables → Actions → Variables** 中添加 `PUBLIC_GISCUS_CATEGORY_ID`，用于 CI 构建。

@@ -19,6 +19,8 @@ export interface UIStrings {
     editPage: string;
     previousPost: string;
     nextPost: string;
+    comments: string;
+    commentsSetupHint: string;
   };
   pagination: {
     prev: string;
@@ -34,6 +36,9 @@ export interface UIStrings {
   footer: {
     copyright: string;
     allRightsReserved: string;
+    siteViews: string;
+    siteVisitors: string;
+    pageViews: string;
   };
   pages: {
     tagTitle: string;

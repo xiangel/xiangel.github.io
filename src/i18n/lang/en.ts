@@ -21,6 +21,9 @@ export default {
     editPage: "Edit page",
     previousPost: "Previous Post",
     nextPost: "Next Post",
+    comments: "Comments",
+    commentsSetupHint:
+      "Comments are not configured yet. Enable Discussions, install the Giscus app, then run npm run giscus:setup to get the categoryId.",
   },
   pagination: {
     prev: "Prev",
@@ -36,6 +39,9 @@ export default {
   footer: {
     copyright: "Copyright",
     allRightsReserved: "All rights reserved.",
+    siteViews: "Total views",
+    siteVisitors: "Visitors",
+    pageViews: "Page views",
   },
   pages: {
     tagTitle: "Tag",

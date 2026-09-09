@@ -21,6 +21,9 @@ export default {
     editPage: "编辑页面",
     previousPost: "上一篇",
     nextPost: "下一篇",
+    comments: "评论",
+    commentsSetupHint:
+      "评论功能尚未配置。请在仓库 Settings 中启用 Discussions，安装 Giscus App，然后运行 npm run giscus:setup 获取 categoryId。",
   },
   pagination: {
     prev: "上一页",
@@ -36,6 +39,9 @@ export default {
   footer: {
     copyright: "版权所有",
     allRightsReserved: "保留所有权利。",
+    siteViews: "总访问量",
+    siteVisitors: "访客数",
+    pageViews: "本文阅读",
   },
   pages: {
     tagTitle: "标签",

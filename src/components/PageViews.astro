@@ -1,0 +1,77 @@
+---
+import config from "@/config";
+import { useTranslations } from "@/i18n";
+
+interface Props {
+  /** Which counters to display. */
+  variant?: "site" | "page" | "all";
+  class?: string;
+}
+
+const { variant = "site", class: className } = Astro.props;
+const t = useTranslations(Astro.currentLocale);
+
+const showSite = variant === "site" || variant === "all";
+const showPage = variant === "page" || variant === "all";
+
+if (!config.features.showPageViews) return null;
+---
+
+<div
+  class:list={[
+    "pageviews text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm",
+    className,
+  ]}
+>
+  {
+    showSite && (
+      <>
+        <span
+          id="busuanzi_container_site_pv"
+          class="inline-flex items-center gap-1"
+        >
+          <span>{t.footer.siteViews}</span>
+          <span id="busuanzi_value_site_pv" class="font-medium tabular-nums">
+            —
+          </span>
+        </span>
+        <span aria-hidden="true" class="text-border">
+          ·
+        </span>
+        <span
+          id="busuanzi_container_site_uv"
+          class="inline-flex items-center gap-1"
+        >
+          <span>{t.footer.siteVisitors}</span>
+          <span id="busuanzi_value_site_uv" class="font-medium tabular-nums">
+            —
+          </span>
+        </span>
+      </>
+    )
+  }
+  {
+    showPage && (
+      <>
+        {showSite && (
+          <span aria-hidden="true" class="text-border">
+            ·
+          </span>
+        )}
+        <span
+          id="busuanzi_container_page_pv"
+          class="inline-flex items-center gap-1"
+        >
+          <span>{t.footer.pageViews}</span>
+          <span id="busuanzi_value_page_pv" class="font-medium tabular-nums">
+            —
+          </span>
+        </span>
+      </>
+    )
+  }
+</div>
+
+<script>
+  import "@/scripts/pageviews";
+</script>

@@ -39,6 +39,9 @@ export default {
   footer: {
     copyright: "Copyright",
     allRightsReserved: "All rights reserved.",
+    siteViews: "Total views",
+    siteVisitors: "Visitors",
+    pageViews: "Page views",
   },
   pages: {
     tagTitle: "Tag",

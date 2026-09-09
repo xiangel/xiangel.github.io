@@ -27,6 +27,7 @@ export default defineAstroPaperConfig({
       url: "https://github.com/xiangel/xiangel.github.io/edit/main/",
     },
     search: "pagefind",
+    showPageViews: true,
     giscus: {
       enabled: true,
       repo: "xiangel/xiangel.github.io",

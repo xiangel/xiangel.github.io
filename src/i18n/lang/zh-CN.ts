@@ -39,6 +39,9 @@ export default {
   footer: {
     copyright: "版权所有",
     allRightsReserved: "保留所有权利。",
+    siteViews: "总访问量",
+    siteVisitors: "访客数",
+    pageViews: "本文阅读",
   },
   pages: {
     tagTitle: "标签",

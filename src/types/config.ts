@@ -61,6 +61,8 @@ interface FeaturesConfig {
   search?: "pagefind" | false;
   /** Giscus comment widget (GitHub Discussions). */
   giscus?: GiscusConfig;
+  /** Public page view counter (Busuanzi). Defaults to true. */
+  showPageViews?: boolean;
 }
 
 export interface GiscusConfig {

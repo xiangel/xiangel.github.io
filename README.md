@@ -7,6 +7,7 @@
 - 精致排版，明暗主题切换
 - Markdown 写文章，Git 版本管理
 - Pagefind 全文搜索
+- 不蒜子访问量统计（页脚全站 + 文章页阅读数）
 - GitHub Actions 自动部署
 
 ## 本地开发

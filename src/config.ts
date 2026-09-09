@@ -55,6 +55,7 @@ const config: ResolvedAstroPaperConfig = {
     editPost: userConfig.features?.editPost ?? { enabled: false },
     search: userConfig.features?.search ?? "pagefind",
     giscus: resolveGiscusConfig(userConfig.features?.giscus),
+    showPageViews: userConfig.features?.showPageViews ?? true,
   },
   socials: userConfig.socials ?? [],
   shareLinks: userConfig.shareLinks ?? [],

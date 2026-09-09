@@ -1,8 +1,8 @@
 ---
 author: xiangel
 pubDatetime: 2026-09-09T02:30:00Z
-title: "大模型推理调度（上）：从 Continuous Batching 到缓存感知调度"
-slug: llm-inference-scheduling-part-1
+title: "大模型推理调度（单机篇）：从 Continuous Batching 到缓存感知调度"
+slug: llm-inference-scheduling-single-node
 featured: true
 draft: false
 tags:
@@ -21,10 +21,9 @@ description: 单卡引擎内部，一次 forward 里到底该算谁、和谁拼�
 
 > 有一堆用户请求、一张（或几张）GPU、一块装不下所有请求的 KV 显存，那么**每一步该算谁、和谁拼一批、谁先谁后、显存不够踢谁**？
 
-这是本系列第三篇。[第一篇](/posts/from-causal-lm-to-inference-system/)讲了推理系统的模块是怎么从 Transformer 里"长"出来的，[第二篇](/posts/kv-cache-paged-attention-and-prefix-caching/)讲了最吃显存的 KV Cache 怎么管。调度这一层往上再走一步。内容较多，我拆成**上下两篇**：
+这是本系列第三篇。[第一篇](/posts/from-causal-lm-to-inference-system/)讲了推理系统的模块是怎么从 Transformer 里"长"出来的，[第二篇](/posts/kv-cache-paged-attention-and-prefix-caching/)讲了最吃显存的 KV Cache 怎么管。调度这一层往上再走一步。
 
-- **上篇（本文）**：单卡引擎**内部**的调度——连续批处理、chunked prefill、抢占、排队与公平、缓存感知调度。
-- **下篇**：跨实例的**集群**调度——prefill/decode 分离、全局 KV 感知路由。
+**本篇只聚焦单机（单卡 / 单引擎）内部的调度**——连续批处理、chunked prefill、抢占、排队与公平、缓存感知调度。至于跨实例的**分布式（集群）调度**（prefill/decode 分离、全局 KV 感知路由），得先把 **PD 分离**这块地基讲透，所以留到后面**单独成篇**再展开，本篇不涉及。
 
 全程我用**操作系统的 CPU 调度**做类比（进程、时间片、抢占、优先级、饥饿——这些几十年前就研究透了），沿着"**每暴露一个问题，就引入一种优化**"的主线往下讲。
 
@@ -328,4 +327,4 @@ def exp_c():
 
 一句话带走：**推理调度就是在固定 GPU-时间和 KV-显存下，反复在"吞吐 / TTFT / TPOT / 公平 / 命中率"这几个互相拉扯的目标之间选点。**
 
-延伸阅读（也是**下篇**的主题）：单卡之外，当一个实例扛不住时，就要把 **prefill 和 decode 拆到不同 GPU 池**（DistServe、Splitwise），并让一个**全局调度器**按"KV 缓存在哪、传输多贵、SLO 是否满足"来路由请求（Mooncake 的 KVCache-centric 架构 + early rejection）。下篇见。
+延伸阅读：单机之外，当一个实例扛不住时，就要把 **prefill 和 decode 拆到不同 GPU 池**（DistServe、Splitwise），并让一个**全局调度器**按"KV 缓存在哪、传输多贵、SLO 是否满足"来路由请求（Mooncake 的 KVCache-centric 架构 + early rejection）。这套**分布式调度**建立在 PD 分离这块地基上——所以接下来我会先单独写一篇 **PD 分离**，把它讲透之后，再单独开一篇讲**分布式（集群）调度**。

@@ -166,9 +166,58 @@ vLLM V1 甚至把 prompt token 和 output token **统一**成"一个请求这轮
 
 下面用纯 Python 仿真**隔离**地验证前面几个结论。每个实验只放大**一个**效应，方便看清因果（因此不是端到端基准，倍数不能直接等同真机）。全部 `SEED=42` 可复现，无需 GPU / 模型 / 联网。
 
+公共前置（三个实验共用；下面每段只贴仿真核心逻辑，`matplotlib` 绘图代码从略）：
+
+```python
+import heapq
+import numpy as np
+
+SEED = 42  # 固定随机种子，三个实验都可复现
+
+# 重尾的聊天输出长度：多数很短、少数极长（lognormal）
+def decode_lengths(n, rng):
+    x = rng.lognormal(mean=4.4, sigma=0.85, size=n)  # 中位数 ≈ 80
+    return np.clip(x, 4, 2048).astype(int)
+```
+
 ### 实验 A：静态批处理 vs 连续批处理
 
 模拟真实的聊天长度分布（多数短、长尾），批大小 32，对比两种批处理：
+
+```python
+def exp_a():
+    rng = np.random.default_rng(SEED)
+    B, N = 32, 4000                       # 批大小、请求总数
+    L = decode_lengths(N, rng)            # 每个请求要跑的 decode 步数
+    used = int(L.sum())                   # 真正有用的“槽位·迭代”数
+
+    # 静态批处理：固定 B 个一批，整批都要等批内最长的那个跑完
+    static_iters = sum(int(L[i:i + B].max()) for i in range(0, N, B))
+    static_util = used / (B * static_iters)
+
+    # 连续批处理：B 个槽位始终填满，谁跑完立刻补进新请求
+    heap, idx = [], 0
+    while idx < B and idx < N:
+        heap.append(int(L[idx])); idx += 1
+    heapq.heapify(heap)
+    cont_iters = 0
+    while heap:
+        step = heap[0]                    # 最先跑完的那个还差 step 步
+        cont_iters += step
+        heap = [r - step for r in heap]   # 所有在跑的推进 step 步
+        newheap = []
+        for r in heap:                    # 跑完的槽位立刻补队列里的新请求
+            if r > 0:
+                newheap.append(r)
+            elif idx < N:
+                newheap.append(int(L[idx])); idx += 1
+        heap = newheap; heapq.heapify(heap)
+    cont_util = used / (B * cont_iters)
+
+    print(f"static util={static_util * 100:.1f}%  iters={static_iters}")
+    print(f"cont   util={cont_util * 100:.1f}%  iters={cont_iters}")
+    print(f"fewer iterations = {static_iters / cont_iters:.2f}x")
+```
 
 ![静态 vs 连续批处理的 GPU 槽位利用率与总迭代数](/assets/posts/scheduling/sim-batching-utilization.png)
 
@@ -178,6 +227,52 @@ vLLM V1 甚至把 prompt token 和 output token **统一**成"一个请求这轮
 
 在一个略微过载、长尾更重的到达流上（16 个槽位），对比按到达顺序（FCFS）与按短作业优先（SJF）：
 
+```python
+def simulate_queue(arrivals, service, order, c):
+    """c 个并行槽位（连续批处理），非抢占。order ∈ {'fcfs','sjf'}，返回每个请求的延迟。"""
+    n = len(arrivals)
+    done = np.zeros(n)
+    free_at = [0.0] * c                    # 每个槽位下次空闲的时间
+    a_order = np.argsort(arrivals)         # 按到达时间排好序的下标
+    pending, ai, finished, t = [], 0, 0, 0.0
+    while finished < n:
+        slot = int(np.argmin(free_at))     # 最早空出来的槽位
+        slot_free = free_at[slot]
+        while ai < n and arrivals[a_order[ai]] <= max(slot_free, t):
+            pending.append(a_order[ai]); ai += 1        # 已到达的进入候选池
+        if not pending:                    # 没人在等就跳到下一个到达时刻
+            if ai < n:
+                t = arrivals[a_order[ai]]
+                pending.append(a_order[ai]); ai += 1
+            else:
+                break
+        start = max(slot_free, min(arrivals[i] for i in pending))
+        if order == "sjf":
+            pick = min(pending, key=lambda i: service[i])   # 最短作业优先
+        else:
+            pick = min(pending, key=lambda i: arrivals[i])  # 先来先服务
+        pending.remove(pick)
+        finish = start + service[pick]
+        done[pick] = finish - arrivals[pick]   # 延迟 = 排队 + 服务
+        free_at[slot] = finish
+        finished += 1
+    return done
+
+
+def exp_b():
+    rng = np.random.default_rng(SEED)
+    N, c = 3000, 16
+    # 比聊天默认更重的长尾，让少数长请求足以堵住大量短请求
+    service = np.clip(rng.lognormal(mean=4.4, sigma=1.1, size=N), 4, 4096).astype(float)
+    rate = c / service.mean() * 1.15       # 略微过载，队列才会堆积、顺序才重要
+    arrivals = np.cumsum(rng.exponential(1.0 / rate, size=N))
+
+    lat_fcfs = simulate_queue(arrivals, service, "fcfs", c)
+    lat_sjf = simulate_queue(arrivals, service, "sjf", c)
+    for name, lat in [("FCFS", lat_fcfs), ("SJF", lat_sjf)]:
+        print(f"{name}: mean={lat.mean():.0f}  p99={np.percentile(lat, 99):.0f}")
+```
+
 ![FCFS vs SJF 的平均延迟与 p99 延迟](/assets/posts/scheduling/sim-fcfs-vs-sjf.png)
 
 一手结果:SJF 把**平均延迟**从 2091 降到 427——**4.9× 的改善**；但**代价写在同一张图上**：p99 延迟从 4469 涨到 10611（**尾部反而恶化 2.4×**）。这精确复现了第五节的取舍——**SJF 让多数短请求飞快，却把少数长请求推向饥饿。** 生产里要用它，就必须叠加 aging / 公平机制来托住尾部。
@@ -185,6 +280,35 @@ vLLM V1 甚至把 prompt token 和 output token **统一**成"一个请求这轮
 ### 实验 C：naïve prefill vs chunked prefill —— decode 的稳定性
 
 模拟一条 decode 流，其间不时有新 prompt 需要 prefill。naïve 把整段 prompt 塞进一轮，chunked 则按 token budget（512）切块：
+
+```python
+def exp_c():
+    rng = np.random.default_rng(SEED)
+    n_decode, budget, steps = 32, 512, 4000
+    a, b = 0.5, 0.008              # 单轮耗时 ≈ a + b × (本轮 token 数)
+    prefill_prob = 0.06           # 每轮约 6% 概率来一个新 prompt 需要 prefill
+    prompt_len = lambda: int(np.clip(rng.lognormal(7.0, 0.6), 128, 8192))  # 中位 ≈ 1100
+
+    def run(chunked):
+        tbt, pending = [], 0       # pending：还没 prefill 完的 prompt token 数
+        for _ in range(steps):
+            toks = n_decode        # 本轮先算上所有正在 decode 的请求
+            if chunked:            # 切块：每轮只补 (budget - decode) 大小的一块 prefill
+                if pending == 0 and rng.random() < prefill_prob:
+                    pending = prompt_len()
+                if pending > 0:
+                    chunk = min(budget - n_decode, pending)
+                    toks += chunk; pending -= chunk
+            else:                  # naïve：整段 prompt 一次砸进同一轮
+                if rng.random() < prefill_prob:
+                    toks += prompt_len()
+            tbt.append(a + b * toks)   # 这一轮所有 decode 用户都经历的 TBT
+        return np.array(tbt)
+
+    for name, tbt in [("naive", run(False)), ("chunked", run(True))]:
+        print(f"{name}: p50={np.percentile(tbt, 50):.2f} "
+              f"p99={np.percentile(tbt, 99):.2f} max={tbt.max():.2f}")
+```
 
 ![naïve 混批的 TBT 尖刺 vs chunked prefill 的平稳 TBT](/assets/posts/scheduling/sim-chunked-prefill-tbt.png)
 

@@ -52,7 +52,7 @@ Attention(Q_t, K_1:t, V_1:t) = softmax( Q_t · K_1:tᵀ / √d ) · V_1:t
 
 记住这张表：**Prefix Caching 优化的是 Prefill/TTFT**，而 KV Cache 的显存压力主要来自 Decode 阶段不断增长的历史。
 
-KV Cache 有多大？粗略地：`Bytes ≈ 2(K和V) × 层数 × KV头数 × head维度 × token数 × dtype字节数`。
+KV Cache 有多大？粗略地（以单条序列为例）：`Bytes ≈ 2(K和V) × 层数 × KV头数 × head维度 × 序列长度 × dtype字节数`。这里的**序列长度**不是"输入 prompt 的长度"，而是**该序列此刻已缓存的 token 总数 = prompt token 数 + 已生成的 token 数**——所以它随 decode 每走一步 +1、不断变大。上式只是**一条序列**的占用；若是一个 batch，要把 batch 内所有序列的序列长度**累加**（即用"batch 内的总 token 数"代入，而不是请求数）。
 
 它随 **序列长度、层数、KV 头数** 线性增长。这也是为什么 `GQA`（Grouped-Query Attention）、`MQA`、`MLA` 这些"减少 KV 头"的技巧如此重要——它们直接砍掉 KV Cache 的体积。但即便压缩过，KV Cache 依然是长上下文下的显存大户，于是就有了下一个问题：**这么大的东西，到底该怎么在显存里摆放？**
 

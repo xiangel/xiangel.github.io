@@ -1,0 +1,37 @@
+---
+import config from "@/config";
+import { useTranslations } from "@/i18n";
+
+const giscus = config.features.giscus;
+const locale = Astro.currentLocale ?? config.site.lang;
+const t = useTranslations(locale);
+const isConfigured = Boolean(giscus?.categoryId);
+---
+
+{
+  giscus && (
+    <section id="comments" class="mt-10 scroll-mt-20">
+      <h2 class="mb-4 text-xl font-semibold">{t.post.comments}</h2>
+
+      {isConfigured ? (
+        <div
+          id="giscus-container"
+          class="giscus-wrapper min-h-[120px]"
+          data-repo={giscus.repo}
+          data-repo-id={giscus.repoId}
+          data-category={giscus.category}
+          data-category-id={giscus.categoryId}
+          data-mapping={giscus.mapping}
+          data-lang={giscus.lang}
+          data-reactions-enabled={giscus.reactionsEnabled ? "1" : "0"}
+        />
+      ) : (
+        <p class="text-muted-foreground rounded-lg border border-dashed p-4 text-sm leading-relaxed">
+          {t.post.commentsSetupHint}
+        </p>
+      )}
+    </section>
+  )
+}
+
+{isConfigured && <script>import "@/scripts/giscus";</script>}

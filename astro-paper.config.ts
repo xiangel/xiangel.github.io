@@ -27,6 +27,15 @@ export default defineAstroPaperConfig({
       url: "https://github.com/xiangel/xiangel.github.io/edit/main/",
     },
     search: "pagefind",
+    giscus: {
+      enabled: true,
+      repo: "xiangel/xiangel.github.io",
+      repoId: "R_kgDOMu995g",
+      category: "Announcements",
+      categoryId: "",
+      lang: "zh-CN",
+      reactionsEnabled: true,
+    },
   },
   socials: [{ name: "github", url: "https://github.com/xiangel" }],
   shareLinks: [

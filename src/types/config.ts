@@ -59,6 +59,27 @@ interface FeaturesConfig {
    * Set to false to disable search entirely.
    */
   search?: "pagefind" | false;
+  /** Giscus comment widget (GitHub Discussions). */
+  giscus?: GiscusConfig;
+}
+
+export interface GiscusConfig {
+  /** Enable the comment section on post pages. */
+  enabled?: boolean;
+  /** GitHub repository, e.g. "owner/repo". */
+  repo: string;
+  /** Repository node ID from GitHub GraphQL. */
+  repoId: string;
+  /** Discussion category name, e.g. "Announcements". */
+  category: string;
+  /** Discussion category node ID from GitHub GraphQL. */
+  categoryId: string;
+  /** Map comments to page URL paths. Defaults to "pathname". */
+  mapping?: "pathname" | "url" | "title" | "og:title";
+  /** Giscus UI language. Defaults to site lang. */
+  lang?: string;
+  /** Enable emoji reactions. Defaults to true. */
+  reactionsEnabled?: boolean;
 }
 
 interface SocialLink {
@@ -117,10 +138,16 @@ type ResolvedSiteConfig = Required<
 > &
   Pick<SiteConfig, "profile" | "googleVerification">;
 
+export interface ResolvedFeaturesConfig extends Required<
+  Omit<FeaturesConfig, "giscus">
+> {
+  giscus: GiscusConfig | null;
+}
+
 export interface ResolvedAstroPaperConfig {
   site: ResolvedSiteConfig;
   posts: Required<PostsConfig>;
-  features: Required<FeaturesConfig>;
+  features: ResolvedFeaturesConfig;
   socials: SocialLink[];
   shareLinks: ShareLink[];
 }

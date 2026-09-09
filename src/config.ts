@@ -5,10 +5,31 @@
  * apply defaults and expose a fully-resolved config shape (`ResolvedAstroPaperConfig`).
  */
 import userConfig from "@/astro-paper.config";
-import type { ResolvedAstroPaperConfig } from "./types/config";
-import { PUBLIC_GOOGLE_SITE_VERIFICATION } from "astro:env/client";
+import type { GiscusConfig, ResolvedAstroPaperConfig } from "./types/config";
+import {
+  PUBLIC_GISCUS_CATEGORY_ID,
+  PUBLIC_GOOGLE_SITE_VERIFICATION,
+} from "astro:env/client";
+
+export type { GiscusConfig };
 
 const DEFAULT_OG_IMAGE = "default-og.jpg";
+
+function resolveGiscusConfig(
+  giscus: GiscusConfig | undefined
+): GiscusConfig | null {
+  if (!giscus?.enabled) return null;
+
+  const categoryId = PUBLIC_GISCUS_CATEGORY_ID || giscus.categoryId;
+
+  return {
+    ...giscus,
+    categoryId,
+    mapping: giscus.mapping ?? "pathname",
+    lang: giscus.lang ?? userConfig.site.lang ?? "zh-CN",
+    reactionsEnabled: giscus.reactionsEnabled ?? true,
+  };
+}
 
 const config: ResolvedAstroPaperConfig = {
   site: {
@@ -33,6 +54,7 @@ const config: ResolvedAstroPaperConfig = {
     showBackButton: userConfig.features?.showBackButton ?? true,
     editPost: userConfig.features?.editPost ?? { enabled: false },
     search: userConfig.features?.search ?? "pagefind",
+    giscus: resolveGiscusConfig(userConfig.features?.giscus),
   },
   socials: userConfig.socials ?? [],
   shareLinks: userConfig.shareLinks ?? [],

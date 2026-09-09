@@ -1,34 +1,70 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1184" height="320" viewBox="0 0 1184 320" data-drawio="PG14R3JhcGhNb2RlbCBkeD0iMTEyMCIgZHk9IjcyMCIgZ3JpZD0iMSIgZ3JpZFNpemU9IjgiIGd1aWRlcz0iMSIgdG9vbHRpcHM9IjEiIGNvbm5lY3Q9IjEiIGFycm93cz0iMSIgZm9sZD0iMSIgcGFnZT0iMSIgcGFnZVNjYWxlPSIxIiBwYWdlV2lkdGg9IjExODQiIHBhZ2VIZWlnaHQ9IjMyMCIgbWF0aD0iMSIgYmFja2dyb3VuZD0iI0ZGRkZGRiI+PHJvb3Q+PG14Q2VsbCBpZD0iMCIvPjxteENlbGwgaWQ9IjEiIHBhcmVudD0iMCIvPjxteENlbGwgaWQ9IjIiIHZhbHVlPSLlkJDmlrDor40gwrcg6K+N5LiO6K+N55qE6Ze06ZqUIiBzdHlsZT0icm91bmRlZD0xO2FyY1NpemU9MTI7aHRtbD0xO3doaXRlU3BhY2U9d3JhcDtmaWxsQ29sb3I9I0Y4RkFGQztzdHJva2VDb2xvcj0jRTJFOEYwO3N0cm9rZVdpZHRoPTE7Zm9udENvbG9yPSMxRTI5M0I7Zm9udFNpemU9MTQ7Zm9udEZhbWlseT1UaW1lcyBOZXcgUm9tYW4sU2ltU3VuO2ZvbnRTdHlsZT0xO3ZlcnRpY2FsQWxpZ249dG9wO2FsaWduPWxlZnQ7c3BhY2luZ0xlZnQ9MTI7c3BhY2luZ1RvcD0xMCIgdmVydGV4PSIxIiBwYXJlbnQ9IjEiPjxteEdlb21ldHJ5IHg9IjUyOCIgeT0iODAiIHdpZHRoPSI1NTIiIGhlaWdodD0iMTUyIiBhcz0iZ2VvbWV0cnkiLz48L214Q2VsbD48bXhDZWxsIGlkPSIzIiB2YWx1ZT0i5L2g55qE6Zeu6aKYIiBzdHlsZT0icm91bmRlZD0xO2FyY1NpemU9ODtodG1sPTE7d2hpdGVTcGFjZT13cmFwO2ZpbGxDb2xvcj0jREJFQUZFO3N0cm9rZUNvbG9yPSMyNTYzRUI7c3Ryb2tlV2lkdGg9MS41O2ZvbnRDb2xvcj0jMUUyOTNCO2ZvbnRTaXplPTEzO2ZvbnRGYW1pbHk9VGltZXMgTmV3IFJvbWFuLFNpbVN1bjt2ZXJ0aWNhbEFsaWduPW1pZGRsZTthbGlnbj1jZW50ZXIiIHZlcnRleD0iMSIgcGFyZW50PSIxIj48bXhHZW9tZXRyeSB4PSIxNiIgeT0iMTI4IiB3aWR0aD0iMTYwIiBoZWlnaHQ9IjgwIiBhcz0iZ2VvbWV0cnkiLz48L214Q2VsbD48bXhDZWxsIGlkPSI0IiB2YWx1ZT0i6K+75a6M6Zeu6aKYJmx0O2JyJmd0O+etieWIsOesrOS4gOS4quivjSIgc3R5bGU9InJvdW5kZWQ9MTthcmNTaXplPTg7aHRtbD0xO3doaXRlU3BhY2U9d3JhcDtmaWxsQ29sb3I9I0RCRUFGRTtzdHJva2VDb2xvcj0jMjU2M0VCO3N0cm9rZVdpZHRoPTEuNTtmb250Q29sb3I9IzFFMjkzQjtmb250U2l6ZT0xMztmb250RmFtaWx5PVRpbWVzIE5ldyBSb21hbixTaW1TdW47dmVydGljYWxBbGlnbj1taWRkbGU7YWxpZ249Y2VudGVyIiB2ZXJ0ZXg9IjEiIHBhcmVudD0iMSI+PG14R2VvbWV0cnkgeD0iMjU2IiB5PSIxMjgiIHdpZHRoPSIxNjAiIGhlaWdodD0iODAiIGFzPSJnZW9tZXRyeSIvPjwvbXhDZWxsPjxteENlbGwgaWQ9IjUiIHZhbHVlPSLnrKwx5Liq6K+NIiBzdHlsZT0icm91bmRlZD0xO2FyY1NpemU9ODtodG1sPTE7d2hpdGVTcGFjZT13cmFwO2ZpbGxDb2xvcj0jREJFQUZFO3N0cm9rZUNvbG9yPSMyNTYzRUI7c3Ryb2tlV2lkdGg9MS41O2ZvbnRDb2xvcj0jMUUyOTNCO2ZvbnRTaXplPTEzO2ZvbnRGYW1pbHk9VGltZXMgTmV3IFJvbWFuLFNpbVN1bjt2ZXJ0aWNhbEFsaWduPW1pZGRsZTthbGlnbj1jZW50ZXIiIHZlcnRleD0iMSIgcGFyZW50PSIyIj48bXhHZW9tZXRyeSB4PSIyNCIgeT0iNjQiIHdpZHRoPSIxMjAiIGhlaWdodD0iNjAiIGFzPSJnZW9tZXRyeSIvPjwvbXhDZWxsPjxteENlbGwgaWQ9IjYiIHZhbHVlPSLnrKwy5Liq6K+NIiBzdHlsZT0icm91bmRlZD0xO2FyY1NpemU9ODtodG1sPTE7d2hpdGVTcGFjZT13cmFwO2ZpbGxDb2xvcj0jREJFQUZFO3N0cm9rZUNvbG9yPSMyNTYzRUI7c3Ryb2tlV2lkdGg9MS41O2ZvbnRDb2xvcj0jMUUyOTNCO2ZvbnRTaXplPTEzO2ZvbnRGYW1pbHk9VGltZXMgTmV3IFJvbWFuLFNpbVN1bjt2ZXJ0aWNhbEFsaWduPW1pZGRsZTthbGlnbj1jZW50ZXIiIHZlcnRleD0iMSIgcGFyZW50PSIyIj48bXhHZW9tZXRyeSB4PSIyMTYiIHk9IjY0IiB3aWR0aD0iMTIwIiBoZWlnaHQ9IjYwIiBhcz0iZ2VvbWV0cnkiLz48L214Q2VsbD48bXhDZWxsIGlkPSI3IiB2YWx1ZT0i56ysM+S4quivjSDigKYiIHN0eWxlPSJyb3VuZGVkPTE7YXJjU2l6ZT04O2h0bWw9MTt3aGl0ZVNwYWNlPXdyYXA7ZmlsbENvbG9yPSNEQkVBRkU7c3Ryb2tlQ29sb3I9IzI1NjNFQjtzdHJva2VXaWR0aD0xLjU7Zm9udENvbG9yPSMxRTI5M0I7Zm9udFNpemU9MTM7Zm9udEZhbWlseT1UaW1lcyBOZXcgUm9tYW4sU2ltU3VuO3ZlcnRpY2FsQWxpZ249bWlkZGxlO2FsaWduPWNlbnRlciIgdmVydGV4PSIxIiBwYXJlbnQ9IjIiPjxteEdlb21ldHJ5IHg9IjQwOCIgeT0iNjQiIHdpZHRoPSIxMjAiIGhlaWdodD0iNjAiIGFzPSJnZW9tZXRyeSIvPjwvbXhDZWxsPjxteENlbGwgaWQ9IjgiIHZhbHVlPSIiIHN0eWxlPSJlZGdlU3R5bGU9b3J0aG9nb25hbEVkZ2VTdHlsZTtyb3VuZGVkPTA7b3J0aG9nb25hbExvb3A9MTtqZXR0eVNpemU9YXV0bztodG1sPTE7c3Ryb2tlQ29sb3I9IzFFMjkzQjtzdHJva2VXaWR0aD0yO2VuZEFycm93PW9wZW47ZW5kRmlsbD0wO2VuZFNpemU9MTI7ZXhpdFg9MTtleGl0WT0wLjU7ZXhpdER4PTA7ZXhpdER5PTA7ZW50cnlYPTA7ZW50cnlZPTAuNTtlbnRyeUR4PTA7ZW50cnlEeT0wO2p1bXBTdHlsZT1hcmM7anVtcFNpemU9OCIgZWRnZT0iMSIgcGFyZW50PSIxIiBzb3VyY2U9IjMiIHRhcmdldD0iNCI+PG14R2VvbWV0cnkgcmVsYXRpdmU9IjEiIGFzPSJnZW9tZXRyeSI+PC9teEdlb21ldHJ5PjwvbXhDZWxsPjxteENlbGwgaWQ9IjkiIHZhbHVlPSIiIHN0eWxlPSJlZGdlU3R5bGU9b3J0aG9nb25hbEVkZ2VTdHlsZTtyb3VuZGVkPTA7b3J0aG9nb25hbExvb3A9MTtqZXR0eVNpemU9YXV0bztodG1sPTE7c3Ryb2tlQ29sb3I9IzFFMjkzQjtzdHJva2VXaWR0aD0yO2VuZEFycm93PW9wZW47ZW5kRmlsbD0wO2VuZFNpemU9MTI7ZXhpdFg9MTtleGl0WT0wLjU3NTtleGl0RHg9MDtleGl0RHk9MDtlbnRyeVg9MDtlbnRyeVk9MC41O2VudHJ5RHg9MDtlbnRyeUR5PTA7anVtcFN0eWxlPWFyYztqdW1wU2l6ZT04IiBlZGdlPSIxIiBwYXJlbnQ9IjEiIHNvdXJjZT0iNCIgdGFyZ2V0PSI1Ij48bXhHZW9tZXRyeSByZWxhdGl2ZT0iMSIgYXM9Imdlb21ldHJ5Ij48L214R2VvbWV0cnk+PC9teENlbGw+PG14Q2VsbCBpZD0iMTAiIHZhbHVlPSLpppbor43lh7rnjrAiIHN0eWxlPSJlZGdlTGFiZWw7aHRtbD0xO2FsaWduPWNlbnRlcjt2ZXJ0aWNhbEFsaWduPW1pZGRsZTtmb250U2l6ZT0xODtmb250Q29sb3I9IzY0NzQ4Qjtmb250RmFtaWx5PVRpbWVzIE5ldyBSb21hbixTaW1TdW47IiB2ZXJ0ZXg9IjEiIGNvbm5lY3RhYmxlPSIwIiBwYXJlbnQ9IjkiPjxteEdlb21ldHJ5IHg9IjAuNSIgcmVsYXRpdmU9IjEiIGFzPSJnZW9tZXRyeSI+PG14UG9pbnQgeD0iMCIgeT0iLTIyIiBhcz0ib2Zmc2V0Ii8+PC9teEdlb21ldHJ5PjwvbXhDZWxsPjxteENlbGwgaWQ9IjExIiB2YWx1ZT0iIiBzdHlsZT0iZWRnZVN0eWxlPW9ydGhvZ29uYWxFZGdlU3R5bGU7cm91bmRlZD0wO29ydGhvZ29uYWxMb29wPTE7amV0dHlTaXplPWF1dG87aHRtbD0xO3N0cm9rZUNvbG9yPSMxRTI5M0I7c3Ryb2tlV2lkdGg9MjtlbmRBcnJvdz1vcGVuO2VuZEZpbGw9MDtlbmRTaXplPTEyO2V4aXRYPTE7ZXhpdFk9MC41O2V4aXREeD0wO2V4aXREeT0wO2VudHJ5WD0wO2VudHJ5WT0wLjU7ZW50cnlEeD0wO2VudHJ5RHk9MDtkYXNoZWQ9MTtkYXNoUGF0dGVybj02IDQ7anVtcFN0eWxlPWFyYztqdW1wU2l6ZT04IiBlZGdlPSIxIiBwYXJlbnQ9IjEiIHNvdXJjZT0iNSIgdGFyZ2V0PSI2Ij48bXhHZW9tZXRyeSByZWxhdGl2ZT0iMSIgYXM9Imdlb21ldHJ5Ij48L214R2VvbWV0cnk+PC9teENlbGw+PG14Q2VsbCBpZD0iMTIiIHZhbHVlPSIiIHN0eWxlPSJlZGdlU3R5bGU9b3J0aG9nb25hbEVkZ2VTdHlsZTtyb3VuZGVkPTA7b3J0aG9nb25hbExvb3A9MTtqZXR0eVNpemU9YXV0bztodG1sPTE7c3Ryb2tlQ29sb3I9IzFFMjkzQjtzdHJva2VXaWR0aD0yO2VuZEFycm93PW9wZW47ZW5kRmlsbD0wO2VuZFNpemU9MTI7ZXhpdFg9MTtleGl0WT0wLjU7ZXhpdER4PTA7ZXhpdER5PTA7ZW50cnlYPTA7ZW50cnlZPTAuNTtlbnRyeUR4PTA7ZW50cnlEeT0wO2Rhc2hlZD0xO2Rhc2hQYXR0ZXJuPTYgNDtqdW1wU3R5bGU9YXJjO2p1bXBTaXplPTgiIGVkZ2U9IjEiIHBhcmVudD0iMSIgc291cmNlPSI2IiB0YXJnZXQ9IjciPjxteEdlb21ldHJ5IHJlbGF0aXZlPSIxIiBhcz0iZ2VvbWV0cnkiPjwvbXhHZW9tZXRyeT48L214Q2VsbD48L3Jvb3Q+PC9teEdyYXBoTW9kZWw+">
-<defs>
-<marker id="arrow-block" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-  <path d="M 0 0 L 10 5 L 0 10 Z" fill="currentColor"/>
-</marker>
-<marker id="arrow-open" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-  <path d="M 0 0 L 10 5 L 0 10" fill="none" stroke="currentColor" stroke-width="1.5"/>
-</marker>
-<marker id="arrow-classic" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-  <path d="M 0 0 L 10 5 L 0 10 L 3 5 Z" fill="currentColor"/>
-</marker>
-<marker id="arrow-diamond" viewBox="0 0 12 12" refX="12" refY="6" markerWidth="10" markerHeight="10" orient="auto-start-reverse">
-  <path d="M 0 6 L 6 0 L 12 6 L 6 12 Z" fill="currentColor"/>
-</marker>
-</defs>
-<rect width="100%" height="100%" fill="#FFFFFF"/>
-<rect x="528" y="80" width="552" height="152" rx="12" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
-<text x="540" y="90" text-anchor="start" dominant-baseline="hanging" font-family="Times New Roman,SimSun" font-size="14" fill="#1E293B" font-weight="700">吐新词 · 词与词的间隔</text>
-<rect x="16" y="128" width="160" height="80" rx="8" fill="#DBEAFE" stroke="#2563EB" stroke-width="1.5"/>
-<text x="96" y="168" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman,SimSun" font-size="13" fill="#1E293B">你的问题</text>
-<rect x="256" y="128" width="160" height="80" rx="8" fill="#DBEAFE" stroke="#2563EB" stroke-width="1.5"/>
-<text x="336" y="168" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman,SimSun" font-size="13" fill="#1E293B"><tspan x="336" dy="-9.1">读完问题</tspan><tspan x="336" dy="18.2">等到第一个词</tspan></text>
-<rect x="552" y="144" width="120" height="60" rx="8" fill="#DBEAFE" stroke="#2563EB" stroke-width="1.5"/>
-<text x="612" y="174" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman,SimSun" font-size="13" fill="#1E293B">第1个词</text>
-<rect x="744" y="144" width="120" height="60" rx="8" fill="#DBEAFE" stroke="#2563EB" stroke-width="1.5"/>
-<text x="804" y="174" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman,SimSun" font-size="13" fill="#1E293B">第2个词</text>
-<rect x="936" y="144" width="120" height="60" rx="8" fill="#DBEAFE" stroke="#2563EB" stroke-width="1.5"/>
-<text x="996" y="174" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman,SimSun" font-size="13" fill="#1E293B">第3个词 …</text>
-<line x1="176" y1="168" x2="256" y2="168" stroke="#1E293B" stroke-width="2" marker-end="url(#arrow-open)" style="color: #1E293B" fill="none"/>
-<line x1="416" y1="174" x2="552" y2="174" stroke="#1E293B" stroke-width="2" marker-end="url(#arrow-open)" style="color: #1E293B" fill="none"/>
-<line x1="672" y1="174" x2="744" y2="174" stroke="#1E293B" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrow-open)" style="color: #1E293B" fill="none"/>
-<line x1="864" y1="174" x2="936" y2="174" stroke="#1E293B" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrow-open)" style="color: #1E293B" fill="none"/>
-<text x="474" y="149" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman,SimSun" font-size="18" fill="#64748B">首词出现</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="340" viewBox="0 0 960 340" role="img" aria-label="一次请求：Prefill 处理 prompt，Decode 逐步吐词">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+    </marker>
+    <filter id="shadow" x="-8%" y="-8%" width="116%" height="120%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#0f172a" flood-opacity="0.06"/>
+    </filter>
+  </defs>
+
+  <rect width="960" height="340" fill="#FFFFFF"/>
+
+  <text x="480" y="36" text-anchor="middle" font-family="Inter, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="15" font-weight="600" fill="#1E293B">
+    同一条请求：先 Prefill（算力密集），再 Decode（访存密集）
+  </text>
+  <text x="480" y="58" text-anchor="middle" font-family="Inter, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748B">
+    用户体感上对应「等到第一个字（TTFT）」与「字与字之间的间隔（TPOT）」
+  </text>
+
+  <!-- Prefill -->
+  <rect x="40" y="88" width="300" height="96" rx="10" fill="#FFF7ED" stroke="#F97316" stroke-width="1.8" filter="url(#shadow)"/>
+  <text x="190" y="114" text-anchor="middle" font-family="Inter, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11" font-weight="700" letter-spacing="0.08em" fill="#C2410C">PREFILL</text>
+  <text x="190" y="140" text-anchor="middle" font-family="Inter, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="600" fill="#1E293B">整段 prompt 并行处理</text>
+  <text x="190" y="164" text-anchor="middle" font-family="Inter, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748B">写入 KV Cache · 等到第一个词</text>
+
+  <line x1="340" y1="136" x2="378" y2="136" stroke="#334155" stroke-width="2" marker-end="url(#arrow)" style="color:#334155"/>
+
+  <!-- Decode tokens -->
+  <g font-family="Inter, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+    <rect x="388" y="108" width="56" height="56" rx="8" fill="#EFF6FF" stroke="#2563EB" stroke-width="1.6" filter="url(#shadow)"/>
+    <text x="416" y="140" text-anchor="middle" font-size="13" font-weight="600" fill="#1E293B">词1</text>
+
+    <line x1="444" y1="136" x2="462" y2="136" stroke="#2563EB" stroke-width="1.8" marker-end="url(#arrow)" style="color:#2563EB"/>
+
+    <rect x="468" y="108" width="56" height="56" rx="8" fill="#EFF6FF" stroke="#2563EB" stroke-width="1.6" filter="url(#shadow)"/>
+    <text x="496" y="140" text-anchor="middle" font-size="13" font-weight="600" fill="#1E293B">词2</text>
+
+    <line x1="524" y1="136" x2="542" y2="136" stroke="#2563EB" stroke-width="1.8" marker-end="url(#arrow)" style="color:#2563EB"/>
+
+    <rect x="548" y="108" width="56" height="56" rx="8" fill="#EFF6FF" stroke="#2563EB" stroke-width="1.6" filter="url(#shadow)"/>
+    <text x="576" y="140" text-anchor="middle" font-size="13" font-weight="600" fill="#1E293B">词3</text>
+
+    <text x="620" y="140" text-anchor="start" font-size="20" font-weight="500" fill="#94A3B8">…</text>
+  </g>
+
+  <rect x="388" y="88" width="292" height="96" rx="10" fill="none" stroke="#E2E8F0" stroke-width="1.2" stroke-dasharray="6 4"/>
+  <text x="534" y="104" text-anchor="middle" font-family="Inter, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11" font-weight="700" letter-spacing="0.08em" fill="#2563EB">DECODE · 逐步吐词</text>
+
+  <!-- TTFT -->
+  <line x1="52" y1="206" x2="416" y2="206" stroke="#F97316" stroke-width="1.5"/>
+  <polygon points="52,206 58,202 58,210" fill="#F97316"/>
+  <polygon points="416,206 410,202 410,210" fill="#F97316"/>
+  <text x="234" y="226" text-anchor="middle" font-family="Inter, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="600" fill="#C2410C">TTFT（等到第一个字）</text>
+
+  <!-- TPOT -->
+  <line x1="388" y1="206" x2="444" y2="206" stroke="#2563EB" stroke-width="1.5"/>
+  <polygon points="388,206 394,202 394,210" fill="#2563EB"/>
+  <polygon points="444,206 438,202 438,210" fill="#2563EB"/>
+  <text x="416" y="226" text-anchor="middle" font-family="Inter, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="600" fill="#2563EB">TPOT（字间间隔）</text>
+
+  <!-- KV bar -->
+  <text x="40" y="268" font-family="Inter, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748B">KV Cache 长度 →</text>
+  <rect x="160" y="252" width="760" height="22" rx="4" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.2"/>
+  <rect x="160" y="252" width="300" height="22" rx="4" fill="#FDBA74" stroke="none"/>
+  <rect x="460" y="252" width="56" height="22" fill="#93C5FD" stroke="none"/>
+  <rect x="516" y="252" width="56" height="22" fill="#93C5FD" stroke="none"/>
+  <rect x="572" y="252" width="56" height="22" fill="#93C5FD" stroke="none"/>
+  <text x="310" y="292" text-anchor="middle" font-family="Inter, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11" fill="#C2410C">Prefill 写入</text>
+  <text x="548" y="292" text-anchor="middle" font-family="Inter, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11" fill="#2563EB">Decode 逐步追加</text>
 </svg>

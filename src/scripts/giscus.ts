@@ -8,7 +8,9 @@ function getCurrentTheme(): GiscusTheme {
 }
 
 function sendGiscusMessage(message: Record<string, unknown>) {
-  const iframe = document.querySelector<HTMLIFrameElement>("iframe.giscus-frame");
+  const iframe = document.querySelector<HTMLIFrameElement>(
+    "iframe.giscus-frame"
+  );
   if (!iframe?.contentWindow) return;
   iframe.contentWindow.postMessage({ giscus: message }, GISCUS_ORIGIN);
 }

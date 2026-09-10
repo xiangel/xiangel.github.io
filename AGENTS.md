@@ -8,6 +8,13 @@ astro dev --background
 
 Manage the background server with `astro dev stop`, `astro dev status`, and `astro dev logs`.
 
+## Blog diagrams
+
+Use the **diagram-design** skill (`.cursor/skills/diagram-design/`, see its `SKILL.md`) to make diagrams for blog posts — this is the preferred approach over hand-written matplotlib/SVG. It emits self-contained editorial HTML+SVG (optionally PNG).
+
+- Validate any generated diagram with the skill's own checker: `python3 .cursor/skills/diagram-design/scripts/self_check.py <file.html>`.
+- Posts embed raster images from `public/assets/posts/<slug>/`, so render the diagram to PNG before embedding (or inline the SVG). Keep labels in English to avoid CJK glyph issues, matching existing posts.
+
 ## Documentation
 
 Full documentation: https://docs.astro.build

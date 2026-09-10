@@ -7,7 +7,7 @@
  *   npm run export:zhihu -- kv-cache-paged-attention-and-prefix-caching
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -113,6 +113,41 @@ function inlineMarkdown(text) {
     .replace(/`([^`]+)`/g, "<code>$1</code>");
 }
 
+const MIME_BY_EXT = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+};
+
+function resolveLocalAssetPath(src) {
+  const match = src.match(/\/assets\/(.+\.(?:png|jpe?g|gif|webp|svg))(?:[?#].*)?$/i);
+  if (!match) return null;
+  const localPath = join(ROOT, "public/assets", match[1]);
+  return existsSync(localPath) ? localPath : null;
+}
+
+function embedImageAsDataUri(src) {
+  const localPath = resolveLocalAssetPath(src);
+  if (!localPath) return src;
+  const ext = basename(localPath).split(".").pop()?.toLowerCase() ?? "png";
+  const mime = MIME_BY_EXT[ext] ?? "application/octet-stream";
+  const base64 = readFileSync(localPath).toString("base64");
+  return `data:${mime};base64,${base64}`;
+}
+
+function collectImagePaths(body, siteUrl) {
+  const paths = new Set();
+  for (const match of body.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g)) {
+    const src = match[1];
+    const localPath = resolveLocalAssetPath(src.startsWith("/") ? src : src.replace(siteUrl, ""));
+    if (localPath) paths.add(localPath);
+  }
+  return [...paths];
+}
+
 function markdownToHtml(body, siteUrl, slug) {
   const lines = body.split("\n");
   const html = [];
@@ -202,7 +237,10 @@ function markdownToHtml(body, siteUrl, slug) {
     if (image) {
       flushList();
       const [, alt, src] = image;
-      html.push(`<figure><img src="${src}" alt="${escapeHtml(alt)}" /><figcaption>${escapeHtml(alt)}</figcaption></figure>`);
+      const embeddedSrc = embedImageAsDataUri(src);
+      html.push(
+        `<figure><img src="${embeddedSrc}" alt="${escapeHtml(alt)}" /><figcaption>${escapeHtml(alt)}</figcaption></figure>`
+      );
       continue;
     }
 
@@ -313,11 +351,12 @@ ${siteUrl}/assets/posts/kv-cache/diagram-prefill-decode.png
 
 ## 发布步骤
 
-1. 打开 \`article.html\`，浏览器全选复制（Cmd/Ctrl+A → Cmd/Ctrl+C）。
-2. 进入知乎「写文章」，直接粘贴到正文编辑器（保留标题、图片、代码块格式）。
-3. 若图片未自动加载：在知乎编辑器里逐张上传本地图片，或使用下方 Markdown 版里的公网图片链接手动插入。
-4. 文末保留「原文链接」便于读者跳转博客。
-5. 预览无误后发布。
+1. 打开 \`article.html\`（**图片已内嵌 base64**，不依赖外链）。
+2. 浏览器全选复制（Cmd/Ctrl+A → Cmd/Ctrl+C）。
+3. 进入知乎「写文章」，粘贴到正文编辑器。
+4. 若粘贴后图片仍丢失：从同目录 \`images/\` 文件夹手动上传对应 PNG。
+5. 文末保留「原文链接」便于读者跳转博客。
+6. 预览无误后发布。
 
 ## 备选方案（Markdown）
 
@@ -363,10 +402,20 @@ function main() {
   );
   writeFileSync(notesPath, buildPublishNotes(meta, slug, siteUrl));
 
+  const imagesDir = join(outDir, "images");
+  mkdirSync(imagesDir, { recursive: true });
+  const imagePaths = collectImagePaths(transformed, siteUrl);
+  for (const localPath of imagePaths) {
+    copyFileSync(localPath, join(imagesDir, basename(localPath)));
+  }
+
   console.log(`Exported Zhihu bundle to ${outDir}`);
   console.log(`  - ${mdPath}`);
-  console.log(`  - ${htmlPath}`);
+  console.log(`  - ${htmlPath} (images embedded as base64)`);
   console.log(`  - ${notesPath}`);
+  if (imagePaths.length) {
+    console.log(`  - ${imagesDir}/ (${imagePaths.length} images for manual upload fallback)`);
+  }
 }
 
 main();

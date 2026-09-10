@@ -232,3 +232,15 @@ block hash_i = hash( hash_{i-1},  本块的 token,  额外key )
 - **问题二"重复算" → Prefix Caching**：在共享抽象之上，让重复前缀**免于重算**；块级哈希链与基数树（RadixAttention）是两种常见组织方式。
 - **问题三"重复读" → ChunkAttention**：把"共享"从省显存延伸到省访存，在 attention kernel 里让共享前缀只读一次、被多请求 query 复用。
 - 一条贯穿始终的工程规律：**静态内容前置、易变字段后置**，才能让前缀稳定命中。
+
+## 参考
+
+1. Kwon et al., [_Efficient Memory Management for Large Language Model Serving with PagedAttention_](https://arxiv.org/abs/2309.06180)（vLLM / PagedAttention），SOSP 2023.
+2. vLLM 文档，[_Automatic Prefix Caching_](https://docs.vllm.ai/en/latest/features/automatic_prefix_caching.html)（块级哈希前缀缓存）.
+3. Zheng et al., [_SGLang: Efficient Execution of Structured Language Model Programs_](https://arxiv.org/abs/2312.07104)（RadixAttention / 基数树前缀共享），NeurIPS 2024.
+4. Ye et al., [_ChunkAttention: Efficient Self-Attention with Prefix-Aware KV Cache and Two-Phase Partition_](https://arxiv.org/abs/2402.15220)，ACL 2024.
+5. DeepSeek-AI, [_DeepSeek-V2_](https://arxiv.org/abs/2405.04434)（MLA，Multi-head Latent Attention，架构层压缩 KV）.
+6. Zhang et al., [_H2O: Heavy-Hitter Oracle for Efficient Generative Inference of Large Language Models_](https://arxiv.org/abs/2306.14048)，NeurIPS 2023.
+7. Li et al., [_SnapKV: LLM Knows What You are Looking for Before Generation_](https://arxiv.org/abs/2404.14469)，NeurIPS 2024.
+8. Qin et al., [_Mooncake: A KVCache-centric Disaggregated Architecture for LLM Serving_](https://arxiv.org/abs/2407.00079)，FAST 2025.
+9. [LMCache](https://github.com/LMCache/LMCache)（多节点共享 KV 池）.

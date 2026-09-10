@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>知乎发布稿</title>
+  <style>
+    body { max-width: 760px; margin: 40px auto; padding: 0 20px; font: 16px/1.8 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; color: #1f2329; }
+    h1, h2, h3 { line-height: 1.4; margin: 1.6em 0 0.8em; }
+    h1 { font-size: 28px; }
+    h2 { font-size: 22px; border-left: 4px solid #0066ff; padding-left: 12px; }
+    h3 { font-size: 18px; }
+    p, blockquote, pre, figure, table, ul, ol { margin: 0.9em 0; }
+    blockquote { padding: 12px 16px; background: #f6f8fa; border-left: 4px solid #c8cdd4; color: #4e5969; }
+    pre { padding: 14px 16px; background: #f6f8fa; border-radius: 8px; overflow-x: auto; font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    code { font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; background: #f2f3f5; padding: 0 4px; border-radius: 4px; }
+    pre code { background: transparent; padding: 0; }
+    figure { margin: 1.2em 0; text-align: center; }
+    img { max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,.06); }
+    figcaption { margin-top: 8px; font-size: 13px; color: #86909c; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { border: 1px solid #e5e6eb; padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: #f7f8fa; }
+    ul, ol { padding-left: 1.4em; }
+    hr { border: none; border-top: 1px solid #e5e6eb; margin: 2em 0; }
+    .footer { margin-top: 2.5em; padding-top: 1em; border-top: 1px solid #e5e6eb; color: #86909c; font-size: 14px; }
+  </style>
+</head>
+<body>
+<h1>KV Cache 详解：从 PagedAttention 到 ChunkAttention</h1>
+
+
+<p>如果你自己部署过大模型，多半遇到过两件怪事：</p>
+
+<ol>
+<li>模型权重明明放得下，可上下文一长、并发一高，显存立刻 <strong>OOM</strong>。</li>
+<li>第二次问一个相似的问题，&quot;首字&quot;（首个 token）明显更快就蹦出来了。</li>
+</ol>
+
+<p>这两件事背后，是同一个主角：<strong>KV Cache</strong>。它是自回归推理的&quot;记忆&quot;，也是长上下文、高并发场景下最贵的那块显存。这篇文章从 KV Cache 讲起，沿着&quot;<strong>每暴露一个问题，就引入一种优化</strong>&quot;的主线，一步步走到今天几种关键的 Attention 优化：</p>
+
+<ul>
+<li><strong>问题一：KV Cache 太大，显存放不下</strong> → <code>PagedAttention</code>（把显存当虚拟内存来管）</li>
+<li><strong>问题二：相同的前缀被反复重算</strong> → <code>Prefix Caching</code>（哈希链 / RadixAttention 复用前缀）</li>
+<li><strong>问题三：前缀虽已共享，kernel 却仍在重复读</strong> → <code>ChunkAttention</code>（在 attention kernel 里真正复用共享 KV）</li>
+</ul>
+
+<p>全程我会用<strong>操作系统</strong>做类比（这也是 PagedAttention 论文的灵感来源），把每一步的&quot;问题 → 思路 → 效果&quot;讲清楚。</p>
+
+<h2>一、从 KV Cache 说起：它是什么、为什么贵</h2>
+
+<p>Transformer 生成文本是<strong>逐 token</strong>的。生成第 t 个 token 时，它的 Query 要和前面<strong>所有</strong> token 的 Key / Value 做注意力：</p>
+
+<pre><code>Attention(Q_t, K_1:t, V_1:t) = softmax( Q_t · K_1:tᵀ / √d ) · V_1:t
+                                             ▲                 ▲
+                                        需要所有历史 K      需要所有历史 V</code></pre>
+
+<p>关键洞察：<strong>K 和 V 只取决于各自 token 的输入和（冻结的）权重</strong>，一旦算出来就永远不变。既然如此，何必每步都重算前面所有 token 的 K/V？<strong>算一次，缓存起来，反复读</strong>——这就是 KV Cache。它把解码从每步 O(n²) 降到每步 O(n)。</p>
+
+<blockquote><p><strong>类比</strong>：KV Cache 就像你做长阅读理解时的<strong>笔记</strong>。每读一句就记下要点，回答问题时翻笔记即可，而不是把整篇文章重读一遍。</p></blockquote>
+
+<p>推理因此分成两个阶段，它们的成本结构完全不同：</p>
+
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>做什么</th>
+<th>瓶颈</th>
+<th>用户感知</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Prefill</strong></td>
+<td>一次性并行处理整个 prompt</td>
+<td>计算密集（算力）</td>
+<td>TTFT（首 token 延迟）</td>
+</tr>
+<tr>
+<td><strong>Decode</strong></td>
+<td>逐个生成 token，每步读整个 cache</td>
+<td>访存密集（带宽）</td>
+<td>TPOT（每 token 延迟）</td>
+</tr>
+</tbody>
+</table>
+
+<figure><img src="https://xiangel.github.io/assets/posts/kv-cache/diagram-prefill-decode.png" alt="Prefill 与 Decode 两阶段示意：Prefill 一次性并行填充 KV Cache，Decode 逐 token 读取不断增长的 KV Cache" /><figcaption>Prefill 与 Decode 两阶段示意：Prefill 一次性并行填充 KV Cache，Decode 逐 token 读取不断增长的 KV Cache</figcaption></figure>
+
+<p>记住这张表：<strong>Prefix Caching 优化的是 Prefill/TTFT</strong>，而 KV Cache 的显存压力主要来自 Decode 阶段不断增长的历史。</p>
+
+<p>KV Cache 有多大？粗略地：<code>Bytes ≈ 2(K和V) × 层数 × KV头数 × head维度 × token数 × dtype字节数</code>。</p>
+
+<p>它随 <strong>序列长度、层数、KV 头数</strong> 线性增长。这也是为什么 <code>GQA</code>（Grouped-Query Attention）、<code>MQA</code>、<code>MLA</code> 这些&quot;减少 KV 头&quot;的技巧如此重要——它们直接砍掉 KV Cache 的体积。但即便压缩过，KV Cache 依然是长上下文下的显存大户，于是就有了下一个问题：<strong>这么大的东西，到底该怎么在显存里摆放？</strong></p>
+
+<h2>二、第一个问题：显存放不下 —— PagedAttention</h2>
+
+<h3>老办法为什么浪费</h3>
+
+<p>在 PagedAttention 出现之前，主流做法（FasterTransformer 一类）是给每个请求<strong>预留一整块连续显存</strong>，大小按 <code>max_model_len</code>（比如 2048）来算。问题是一个请求可能只生成 300 个 token，剩下的全是<strong>空占着</strong>的浪费。</p>
+
+<p>这会造成三种浪费：</p>
+
+<pre><code>连续预留 max_model_len = 2048 的一个请求：
+
+  [■■■■■■■■□□□□□□□□□□□□□□□□□□□□□□□□□□□□□□□□□□□□□□]
+   ↑ 实际用了 300     ↑ 预留却没用（内部碎片 + 预留浪费）
+
+多个变长请求挤在一起，中间还留下用不上的空洞（外部碎片）：
+
+  [req A ████][ 空洞 ][req B ██][   空洞   ][req C ███]
+              ↑ 放不下新请求，即使总空闲量够</code></pre>
+
+<ul>
+<li><strong>内部碎片</strong>：预留了 2048，只用 300。</li>
+<li><strong>预留浪费</strong>：为&quot;还没生成&quot;的 token 提前占位。</li>
+<li><strong>外部碎片</strong>：变长的连续块之间留下用不上的空隙。</li>
+</ul>
+
+<p>PagedAttention 的论文实测：这类系统 <strong>60–80% 的 KV 显存都被浪费掉了</strong>。</p>
+
+<h3>核心思想：分页</h3>
+
+<blockquote><p><strong>类比</strong>：这正是操作系统几十年前就解决过的问题。程序以为自己拥有一整段连续内存（虚拟地址），实际上 OS 把它切成固定大小的<strong>页（page）</strong>，散落在物理内存各处，用<strong>页表</strong>做映射。进程根本不知道背后是零散的。</p></blockquote>
+
+<p>PagedAttention 把这套<strong>原封不动</strong>搬到 KV Cache 上：</p>
+
+<table>
+<thead>
+<tr>
+<th>操作系统</th>
+<th>PagedAttention</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>页 page</td>
+<td>KV block（默认 16 token）</td>
+</tr>
+<tr>
+<td>页表 page table</td>
+<td>block table（每序列一张）</td>
+</tr>
+<tr>
+<td>虚拟地址</td>
+<td>逻辑块号</td>
+</tr>
+<tr>
+<td>物理帧 frame</td>
+<td>物理块（显存池里任意位置）</td>
+</tr>
+</tbody>
+</table>
+
+<pre><code>逻辑视图（模型以为的连续序列）        物理视图（显存块池，任意摆放）
+Seq A: [blk0][blk1][blk2]             [B0][B1][B2][B3][B4][B5]...
+          |     |     |                ▲         ▲    ▲
+block table(A): 0→B2, 1→B5, 2→B0 ─────┘─────────┘────┘   （非连续，零外部碎片）</code></pre>
+
+<figure><img src="https://xiangel.github.io/assets/posts/kv-cache/diagram-block-table.png" alt="PagedAttention 用 block table 把序列的逻辑块映射到显存池里任意位置的物理块" /><figcaption>PagedAttention 用 block table 把序列的逻辑块映射到显存池里任意位置的物理块</figcaption></figure>
+
+<p>每个序列有一张 <strong>block table</strong>，把&quot;逻辑上连续&quot;的块号，映射到显存池里<strong>任意位置</strong>的物理块。要增长就从空闲池再取一块，结束就还回去。于是：</p>
+
+<ul>
+<li>外部碎片 <strong>归零</strong>（所有块一样大，随便放）。</li>
+<li>内部碎片最多只剩<strong>一个半满的尾块</strong>（≤ 15 个 token 的浪费）。</li>
+</ul>
+
+<p><strong>block size 的取舍</strong>（等价于 OS 选页大小）：块太小，碎片少但元数据/索引开销大；块太大，反之且尾块浪费多。常见实现取 <strong>16 token</strong> 左右，是 A100/H100 上的经验最优。</p>
+
+<h3>一个绕不开的工程细节：定制 kernel</h3>
+
+<p>标准的 FlashAttention kernel 假设 K/V 在显存里是<strong>连续</strong>的。PagedAttention 的块是散落的，所以必须写<strong>定制 CUDA kernel</strong>：按 block table 去各个物理块<strong>gather</strong>（收集）K/V。关键洞察是——<strong>逐序列看是分散的，但逐块看是连续的</strong>（一块内 16 个 token 紧凑排列），所以这层间接寻址的开销在 GPU 上几乎可忽略。</p>
+
+<h3>白捡的红利：Copy-on-Write</h3>
+
+<p>有了&quot;物理块 + 引用计数&quot;这层抽象，<strong>共享</strong>就变得极其自然。</p>
+
+<blockquote><p><strong>类比</strong>：就像 <code>fork()</code> 出子进程时，父子共享同一份内存页，<strong>谁要写才复制那一页</strong>（copy-on-write）。</p></blockquote>
+
+<p>并行采样（<code>best_of=4</code>）或 beam search 时，多个候选<strong>共享同一份前缀块</strong>，只在各自<strong>分叉、真正写入新 token</strong>的地方才复制那一块。被淘汰的候选立刻减引用计数、归还块，零拷贝开销。</p>
+
+<figure><img src="https://xiangel.github.io/assets/posts/kv-cache/diagram-cow.png" alt="Copy-on-Write：整块的共享前缀块从不复制，只有被两个候选共同写入的那个半满尾块被复制一次" /><figcaption>Copy-on-Write：整块的共享前缀块从不复制，只有被两个候选共同写入的那个半满尾块被复制一次</figcaption></figure>
+
+<p>这个&quot;共享前缀块&quot;的能力，正是下一章 <strong>Prefix Caching</strong> 的地基。</p>
+
+<h2>三、第二个问题：相同前缀反复重算 —— Prefix Caching</h2>
+
+<p>真实流量里，<strong>前缀高度重复</strong>：同一个系统提示、同一批 few-shot 示例、RAG 里同一份检索文档、多轮对话里不断累积的历史……如果每个请求都把这些<strong>从头 prefill 一遍</strong>，纯属浪费。</p>
+
+<p>Prefix Caching 的思想一句话：<strong>把已经算好的前缀 KV 块留着，下个请求前缀相同就直接复用，跳过重算。</strong> 它几乎是&quot;免费的午餐&quot;，而且<strong>不改变模型输出</strong>。</p>
+
+<h3>实现思路一：块级哈希链（chained block hashing）</h3>
+
+<p>一种常见做法是用<strong>哈希</strong>来判断&quot;这一块是否已经算过&quot;。每个块的哈希是<strong>链式</strong>的（类似 Merkle chain）：</p>
+
+<pre><code>block hash_i = hash( hash_{i-1},  本块的 token,  额外key )
+                        ▲              ▲             ▲
+                     父块哈希       内容精确匹配    可选的隔离标识</code></pre>
+
+<pre><code>请求1: [ system prompt .......... ][ 用户问题 A ]
+        h0   h1   h2   h3            （算完缓存 h0..h3）
+
+请求2: [ system prompt .......... ][ 用户问题 B ]
+        h0   h1   h2   h3   ✔命中     ← 前缀块哈希全中，直接复用！
+                                      只需为&quot;问题 B&quot;新算</code></pre>
+
+<figure><img src="https://xiangel.github.io/assets/posts/kv-cache/diagram-hash-chain.png" alt="Prefix Caching：两个请求共享的前缀块哈希全部命中，只有末尾独特部分需要重算" /><figcaption>Prefix Caching：两个请求共享的前缀块哈希全部命中，只有末尾独特部分需要重算</figcaption></figure>
+
+<p>几个要点：</p>
+
+<ul>
+<li><strong>块级、只缓存整块</strong>：一个前缀如果只填了新块的一部分（不足一个块，如 16 token），那半块<strong>不会</strong>被缓存。</li>
+<li><strong>精确匹配</strong>：哈希链意味着命中要求<strong>逐 token 完全一致</strong>，而不是&quot;语义相似&quot;。第一个对不上的块，就是重算的起点。</li>
+<li><strong>驱逐</strong>：空闲块按 <strong>LRU</strong> 回收；正在被引用的块（引用计数 &gt; 0）不会被驱逐；请求结束时按&quot;尾块先驱逐&quot;的逆序归还（尾块哈希了最多 token，最不可能被别人复用）。</li>
+</ul>
+
+<p>（哈希算法的选择、多租户 salt 隔离、跨进程哈希一致性等<strong>实现细节</strong>论文并未展开，留到后续分析代码时再谈。）</p>
+
+<h3>实现思路二：基数树（radix tree / RadixAttention）</h3>
+
+<p>除了块级哈希，另一类做法把 KV Cache 组织成一棵 <strong>radix tree（基数树 / 压缩前缀树）</strong>：</p>
+
+<pre><code>              (root)
+                │  &quot;You are a helpful assistant. &quot;   ← 系统提示，只存一份
+             ┌──┴──┐
+   &quot;Doc A…&quot;  │     │  &quot;Doc B…&quot;        ← RAG 不同文档在此分叉
+          ┌──┘     └──┐
+   &quot;…问题1&quot;          &quot;…问题2&quot;          ← 各自会话继续分叉</code></pre>
+
+<figure><img src="https://xiangel.github.io/assets/posts/kv-cache/diagram-radix-tree.png" alt="RadixAttention：把共享前缀组织成基数树，系统提示作为根节点被所有请求共享" /><figcaption>RadixAttention：把共享前缀组织成基数树，系统提示作为根节点被所有请求共享</figcaption></figure>
+
+<ul>
+<li>粒度是 <strong>token 级</strong>（页大小 = 1 token），边可以标注<strong>变长</strong>的 token 序列。</li>
+<li>用 <strong>LRU 驱逐叶子</strong>：系统提示这种根节点被每个请求访问，永远活着；一小时前某次对话的细节则作为叶子被淘汰。</li>
+<li>配合 <strong>cache-aware 调度</strong>提高命中率。</li>
+<li>最大差异<strong>不是</strong>&quot;能共享任意中间子串&quot;——它同样是<strong>从根共享前缀</strong>。真正的优势是 <strong>token 级粒度 + 多级（树状分叉）前缀共享</strong>：对&quot;系统提示 → 检索文档 → 对话历史&quot;这种层层分叉的结构，一棵树能自然表达并做高效的匹配/插入/驱逐，命中率通常明显更高。</li>
+</ul>
+
+<p>一句话对比：</p>
+
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>块级哈希链</th>
+<th>基数树（RadixAttention）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>数据结构</td>
+<td>全局哈希表 + 链式块哈希</td>
+<td>radix tree</td>
+</tr>
+<tr>
+<td>粒度</td>
+<td>固定块（如 16 token），仅整块</td>
+<td>token 级</td>
+</tr>
+<tr>
+<td>共享结构</td>
+<td>单层前导前缀（块对齐）</td>
+<td>前导前缀 + 多级树状分叉（token 级）</td>
+</tr>
+<tr>
+<td>强项</td>
+<td>实现简单、块独立、易分配回收</td>
+<td>RAG/多级共享命中率更高</td>
+</tr>
+</tbody>
+</table>
+
+<h2>四、第三个问题：共享了，kernel 却还在重复读 —— ChunkAttention</h2>
+
+<p>前面两种做法（块级哈希、基数树）解决的是&quot;<strong>KV 怎么共享、怎么省显存</strong>&quot;。但还有一个常被忽略的缝隙：<strong>共享之后，attention kernel 真的高效利用了这份共享吗？</strong> 传统实现里，即便前缀 KV 在显存里只存了一份，解码时每个请求仍会<strong>各自把这段共享 KV 从显存读一遍</strong>、各自跑一次 attention——访存被重复放大了。</p>
+
+<p><strong>ChunkAttention</strong>（微软，ACL 2024）正盯着这个缝隙。它做两件事：</p>
+
+<ol>
+<li><strong>Prefix-Aware KV Cache（PAKV）</strong>：把单块的 K/V 张量切成固定大小的 <strong>chunk</strong>（示例 chunk size = 256），组织成一棵<strong>前缀树</strong>。相同前缀的请求在树上<strong>共用同一批 chunk</strong>，前缀 KV 只存一份，后续按请求分叉出各自的私有尾块。</li>
+</ol>
+
+<figure><img src="https://xiangel.github.io/assets/posts/kv-cache/diagram-chunkattention-memory.png" alt="ChunkAttention 把共享前缀切成 chunk 存进前缀树，只存一份" /><figcaption>ChunkAttention 把共享前缀切成 chunk 存进前缀树，只存一份</figcaption></figure>
+
+<blockquote><p>显存账（论文示例）：<code>16 个 chunk × 256 = 4096</code> 的共享前缀只存一份，3 个请求各自 100 token 的私有尾巴另计，相比&quot;每请求各存整段前缀&quot;约省 <strong>3×</strong> 显存。</p></blockquote>
+
+<ol>
+<li><strong>Two-Phase Partition（TPP）</strong>：真正的新意在 <strong>attention kernel</strong>。解码时把自注意力拆成两个阶段：</li>
+</ol>
+<p>   - <strong>Chunk-first（共享阶段）</strong>：只处理被多个请求共享的 chunk。把这些请求的 query <strong>batch 在一起</strong>去和共享 chunk 做注意力——于是变成 <strong>矩阵 × 矩阵</strong>、能吃满 tensor core；用 <strong>online softmax</strong> 存下部分结果 <code>O^(C), m^(C), n^(C)</code>，分区之间无需同步。</p>
+<p>   - <strong>Sequence-first（私有阶段）</strong>：再逐请求处理各自的私有尾块（<strong>向量 × 矩阵</strong>），并把上一阶段的共享部分结果<strong>合并</strong>（online softmax）得到最终输出。</p>
+
+<figure><img src="https://xiangel.github.io/assets/posts/kv-cache/diagram-chunkattention-twophase.png" alt="ChunkAttention 的 two-phase partition：共享 chunk 批量算一次，私有尾块逐请求算再合并" /><figcaption>ChunkAttention 的 two-phase partition：共享 chunk 批量算一次，私有尾块逐请求算再合并</figcaption></figure>
+
+<p>关键收益是<strong>数据局部性</strong>：共享前缀的 KV 在 chunk-first 阶段<strong>只从显存读一次</strong>、被所有请求的 query 复用，而不是每请求各读一遍。论文报告：系统提示长度 1024–4096 时，自注意力 kernel 相比 SOTA 实现加速 <strong>3.2–4.8×</strong>。</p>
+
+<blockquote><p><strong>一句话定位</strong>：前面的做法回答了&quot;<strong>KV 怎么共享</strong>&quot;，ChunkAttention 追问&quot;<strong>共享之后，怎么让 attention kernel 真正复用这份共享 KV</strong>&quot;——把&quot;共享&quot;从省显存延伸到了省访存、提升算力利用率。</p></blockquote>
+
+<h2>五、延伸阅读（本文未展开的进阶话题）</h2>
+
+<p>这些方向能进一步压榨 KV Cache，留给后续文章或读者自行深入：</p>
+
+<ul>
+<li><strong>cache-aware 调度</strong>：在基数树之上，按&quot;最长公共前缀优先&quot;排序等待队列，进一步抬高命中率，值得单独一篇。</li>
+<li><strong>MLA（Multi-head Latent Attention，DeepSeek）</strong>：把 KV 压成低秩潜向量，从&quot;架构层&quot;直接缩小 KV Cache。</li>
+<li><strong>KV 量化</strong>：<code>FP8 / INT8</code> KV Cache，用精度换一半甚至四分之一的显存。</li>
+<li><strong>Token 驱逐 / 稀疏</strong>：<code>H2O</code>、<code>SnapKV</code> 等，只保留&quot;重要&quot;的历史 token。</li>
+<li><strong>分布式 KV 与 PD 分离</strong>：<code>LMCache</code> + <code>Mooncake</code> 把多节点内存聚合成共享 KV 池，配合 prefill/decode 分离做<strong>跨实例前缀共享</strong>。</li>
+</ul>
+
+<h2>六、总结</h2>
+
+<p>一条主线，三次&quot;发现问题 → 引入优化&quot;：</p>
+
+<ul>
+<li><strong>起点 · KV Cache</strong>：自回归推理的记忆，也是长上下文/高并发的显存大户——一切优化的源头。</li>
+<li><strong>问题一&quot;放不下&quot; → PagedAttention</strong>：借操作系统的<strong>分页 + copy-on-write</strong>，把显存浪费从 60–80% 降到个位数，并提供&quot;可共享物理块&quot;这一关键抽象。</li>
+<li><strong>问题二&quot;重复算&quot; → Prefix Caching</strong>：在共享抽象之上，让重复前缀<strong>免于重算</strong>；块级哈希链与基数树（RadixAttention）是两种常见组织方式。</li>
+<li><strong>问题三&quot;重复读&quot; → ChunkAttention</strong>：把&quot;共享&quot;从省显存延伸到省访存，在 attention kernel 里让共享前缀只读一次、被多请求 query 复用。</li>
+<li>一条贯穿始终的工程规律：<strong>静态内容前置、易变字段后置</strong>，才能让前缀稳定命中。</li>
+</ul>
+
+<p>---</p>
+
+<p><strong>原文链接</strong>：https://xiangel.github.io/posts/kv-cache-paged-attention-and-prefix-caching/</p>
+
+<p><strong>系列上一篇</strong>：[从 Transformer 出发来看推理系统](https://xiangel.github.io/posts/from-causal-lm-to-inference-system/)</p>
+
+<hr />
+<div class="footer">
+  <p>原文链接：<a href="https://xiangel.github.io/posts/kv-cache-paged-attention-and-prefix-caching/">https://xiangel.github.io/posts/kv-cache-paged-attention-and-prefix-caching/</a></p>
+  <p>系列上一篇：<a href="https://xiangel.github.io/posts/from-causal-lm-to-inference-system/">从 Transformer 出发来看推理系统</a></p>
+</div>
+</body>
+</html>

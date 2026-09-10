@@ -52,7 +52,7 @@ Attention(Q_t, K_1:t, V_1:t) = softmax( Q_t · K_1:tᵀ / √d ) · V_1:t
 
 记住这张表：**Prefix Caching 优化的是 Prefill/TTFT**，而 KV Cache 的显存压力主要来自 Decode 阶段不断增长的历史。
 
-KV Cache 有多大？粗略地：`Bytes ≈ 2(K和V) × 层数 × KV头数 × head维度 × token数 × dtype字节数`。
+KV Cache 有多大？粗略地（以单条序列为例）：`Bytes ≈ 2(K和V) × 层数 × KV头数 × head维度 × 序列长度 × dtype字节数`。这里的**序列长度**不是"输入 prompt 的长度"，而是**该序列此刻已缓存的 token 总数 = prompt token 数 + 已生成的 token 数**——所以它随 decode 每走一步 +1、不断变大。上式只是**一条序列**的占用；若是一个 batch，要把 batch 内所有序列的序列长度**累加**（即用"batch 内的总 token 数"代入，而不是请求数）。
 
 它随 **序列长度、层数、KV 头数** 线性增长。这也是为什么 `GQA`（Grouped-Query Attention）、`MQA`、`MLA` 这些"减少 KV 头"的技巧如此重要——它们直接砍掉 KV Cache 的体积。但即便压缩过，KV Cache 依然是长上下文下的显存大户，于是就有了下一个问题：**这么大的东西，到底该怎么在显存里摆放？**
 
@@ -232,3 +232,15 @@ block hash_i = hash( hash_{i-1},  本块的 token,  额外key )
 - **问题二"重复算" → Prefix Caching**：在共享抽象之上，让重复前缀**免于重算**；块级哈希链与基数树（RadixAttention）是两种常见组织方式。
 - **问题三"重复读" → ChunkAttention**：把"共享"从省显存延伸到省访存，在 attention kernel 里让共享前缀只读一次、被多请求 query 复用。
 - 一条贯穿始终的工程规律：**静态内容前置、易变字段后置**，才能让前缀稳定命中。
+
+## 参考
+
+1. Kwon et al., [_Efficient Memory Management for Large Language Model Serving with PagedAttention_](https://arxiv.org/abs/2309.06180)（vLLM / PagedAttention），SOSP 2023.
+2. vLLM 文档，[_Automatic Prefix Caching_](https://docs.vllm.ai/en/latest/features/automatic_prefix_caching.html)（块级哈希前缀缓存）.
+3. Zheng et al., [_SGLang: Efficient Execution of Structured Language Model Programs_](https://arxiv.org/abs/2312.07104)（RadixAttention / 基数树前缀共享），NeurIPS 2024.
+4. Ye et al., [_ChunkAttention: Efficient Self-Attention with Prefix-Aware KV Cache and Two-Phase Partition_](https://arxiv.org/abs/2402.15220)，ACL 2024.
+5. DeepSeek-AI, [_DeepSeek-V2_](https://arxiv.org/abs/2405.04434)（MLA，Multi-head Latent Attention，架构层压缩 KV）.
+6. Zhang et al., [_H2O: Heavy-Hitter Oracle for Efficient Generative Inference of Large Language Models_](https://arxiv.org/abs/2306.14048)，NeurIPS 2023.
+7. Li et al., [_SnapKV: LLM Knows What You are Looking for Before Generation_](https://arxiv.org/abs/2404.14469)，NeurIPS 2024.
+8. Qin et al., [_Mooncake: A KVCache-centric Disaggregated Architecture for LLM Serving_](https://arxiv.org/abs/2407.00079)，FAST 2025.
+9. [LMCache](https://github.com/LMCache/LMCache)（多节点共享 KV 池）.

@@ -17,9 +17,6 @@ pnpm-debug.log*
 .env
 .env.production
 
-# zhihu login session (never commit)
-.secrets/
-
 # macOS-specific files
 .DS_Store
 

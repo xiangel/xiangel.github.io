@@ -12,8 +12,6 @@
     "sync": "astro sync",
     "astro": "astro",
     "giscus:setup": "bash scripts/giscus-setup.sh",
-    "export:zhihu": "node scripts/export-zhihu.mjs",
-    "publish:zhihu": "node scripts/publish-zhihu.mjs",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "lint": "eslint ."

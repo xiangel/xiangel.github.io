@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh">
 <head>
   <meta charset="UTF-8">
   <title>KVCache-centric scheduling</title>
@@ -20,48 +20,48 @@
       <rect width="100%" height="100%" fill="#f5f5f5"/>
       <rect width="100%" height="100%" fill="url(#d4)" opacity="0.55"/>
 
-      <text x="60" y="46" fill="#4f5d75" font-size="11" font-family="'Geist Mono',monospace" letter-spacing="0.18em">KVCACHE-CENTRIC SCHEDULING · MOONCAKE CONDUCTOR</text>
-      <text x="60" y="80" fill="#2d3142" font-size="26" font-family="'Instrument Serif',serif">Pick a prefill–decode pair, not just a worker</text>
+      <text x="60" y="46" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.18em">KVCACHE-CENTRIC 调度 · MOONCAKE CONDUCTOR</text>
+      <text x="60" y="80" fill="#2d3142" font-size="26" font-family="'Instrument Serif','Noto Serif CJK SC',serif">选的是一对 prefill–decode，而不只是一台机器</text>
 
       <!-- request -->
       <rect x="60" y="150" width="150" height="60" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.30)"/>
-      <text x="135" y="176" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">new request</text>
-      <text x="135" y="193" fill="#7a8399" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">prefix + SLO</text>
+      <text x="135" y="176" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">新请求</text>
+      <text x="135" y="193" fill="#7a8399" font-size="9" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">前缀 + SLO</text>
       <line x1="210" y1="180" x2="252" y2="180" stroke="#2d3142" stroke-width="1.8" marker-end="url(#a4)"/>
 
       <!-- Conductor -->
       <rect x="256" y="140" width="180" height="130" rx="8" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1.4"/>
-      <text x="346" y="168" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">Conductor</text>
-      <text x="346" y="188" fill="#7a8399" font-size="9.5" font-family="'Geist Mono',monospace" text-anchor="middle">score every (P, D) pair</text>
-      <text x="346" y="212" fill="#4f5d75" font-size="9.5" font-family="'Geist',sans-serif" text-anchor="middle">reuse − prefill queue</text>
-      <text x="346" y="227" fill="#4f5d75" font-size="9.5" font-family="'Geist',sans-serif" text-anchor="middle">− prefill − KV transfer</text>
-      <text x="346" y="242" fill="#4f5d75" font-size="9.5" font-family="'Geist',sans-serif" text-anchor="middle">subject to TTFT / TBT SLO</text>
+      <text x="346" y="168" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">Conductor</text>
+      <text x="346" y="188" fill="#7a8399" font-size="9.5" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">给每个 (P, D) 对打分</text>
+      <text x="346" y="212" fill="#4f5d75" font-size="9.5" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">复用 − prefill 排队</text>
+      <text x="346" y="227" fill="#4f5d75" font-size="9.5" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">− prefill − KV 传输</text>
+      <text x="346" y="242" fill="#4f5d75" font-size="9.5" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">满足 TTFT / TBT SLO</text>
       <line x1="436" y1="180" x2="486" y2="180" stroke="#eb6c36" stroke-width="1.8" marker-end="url(#a4A)"/>
 
       <!-- candidate table -->
-      <text x="490" y="132" fill="#4f5d75" font-size="10" font-family="'Geist Mono',monospace" letter-spacing="0.12em">CANDIDATE PAIRS</text>
-      <g font-family="'Geist Mono',monospace" font-size="10">
+      <text x="490" y="132" fill="#4f5d75" font-size="10" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.12em">候选 (P,D) 对</text>
+      <g font-family="'Geist Mono','Noto Sans CJK SC',monospace" font-size="10">
         <!-- header -->
-        <text x="510" y="158" fill="#7a8399">pair</text>
-        <text x="660" y="158" fill="#7a8399">prefix reuse</text>
-        <text x="810" y="158" fill="#7a8399">est. TTFT</text>
-        <text x="915" y="158" fill="#7a8399">pick</text>
+        <text x="510" y="158" fill="#7a8399">配对</text>
+        <text x="660" y="158" fill="#7a8399">前缀复用</text>
+        <text x="810" y="158" fill="#7a8399">预估 TTFT</text>
+        <text x="915" y="158" fill="#7a8399">选择</text>
         <!-- row 1 -->
         <rect x="490" y="166" width="490" height="30" rx="4" fill="#ffffff" stroke="rgba(45,49,66,0.18)"/>
         <text x="510" y="185" fill="#2d3142">(P1, D2)</text>
-        <text x="660" y="185" fill="#4f5d75">short</text>
+        <text x="660" y="185" fill="#4f5d75">短</text>
         <text x="810" y="185" fill="#4f5d75">1.6 s</text>
         <text x="915" y="185" fill="#7a8399">—</text>
         <!-- row 2 chosen -->
         <rect x="490" y="200" width="490" height="30" rx="4" fill="rgba(235,108,54,0.10)" stroke="#eb6c36" stroke-width="1.4"/>
         <text x="510" y="219" fill="#2d3142">(P2, D1)</text>
-        <text x="660" y="219" fill="#eb6c36">long ✓</text>
+        <text x="660" y="219" fill="#eb6c36">长 ✓</text>
         <text x="810" y="219" fill="#eb6c36">0.9 s</text>
         <text x="915" y="219" fill="#eb6c36">✓</text>
         <!-- row 3 -->
         <rect x="490" y="234" width="490" height="30" rx="4" fill="#ffffff" stroke="rgba(45,49,66,0.18)"/>
         <text x="510" y="253" fill="#2d3142">(P3, D3)</text>
-        <text x="660" y="253" fill="#4f5d75">none</text>
+        <text x="660" y="253" fill="#4f5d75">无</text>
         <text x="810" y="253" fill="#4f5d75">1.2 s</text>
         <text x="915" y="253" fill="#7a8399">—</text>
       </g>
@@ -69,40 +69,40 @@
       <line x1="60" y1="300" x2="980" y2="300" stroke="rgba(45,49,66,0.10)"/>
 
       <!-- global KV pool -->
-      <text x="60" y="340" fill="#eb6c36" font-size="11" font-family="'Geist Mono',monospace" letter-spacing="0.14em">GLOBAL KV POOL  ·  hot blocks replicated, cold blocks swapped out</text>
+      <text x="60" y="340" fill="#eb6c36" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.14em">全局 KV 池 · 热块复制，冷块换出</text>
 
       <!-- chosen pair with KV transfer -->
       <rect x="120" y="372" width="160" height="90" rx="8" fill="rgba(235,108,54,0.08)" stroke="#eb6c36"/>
-      <text x="200" y="404" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">P2 (prefill)</text>
-      <text x="200" y="424" fill="#7a8399" font-size="9.5" font-family="'Geist Mono',monospace" text-anchor="middle">holds prefix KV</text>
-      <text x="200" y="440" fill="#7a8399" font-size="9.5" font-family="'Geist Mono',monospace" text-anchor="middle">reuse + compute</text>
+      <text x="200" y="404" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">P2 (prefill)</text>
+      <text x="200" y="424" fill="#7a8399" font-size="9.5" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">持有前缀 KV</text>
+      <text x="200" y="440" fill="#7a8399" font-size="9.5" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">复用 + 计算</text>
 
       <line x1="280" y1="417" x2="420" y2="417" stroke="#4f5d75" stroke-width="1.8" marker-end="url(#a4)"/>
       <rect x="300" y="392" width="100" height="16" rx="2" fill="#f5f5f5"/>
-      <text x="350" y="404" fill="#4f5d75" font-size="9.5" font-family="'Geist',sans-serif" text-anchor="middle">KV transfer</text>
+      <text x="350" y="404" fill="#4f5d75" font-size="9.5" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">KV 传输</text>
 
       <rect x="420" y="372" width="160" height="90" rx="8" fill="rgba(79,93,117,0.10)" stroke="#4f5d75"/>
-      <text x="500" y="404" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">D1 (decode)</text>
-      <text x="500" y="424" fill="#7a8399" font-size="9.5" font-family="'Geist Mono',monospace" text-anchor="middle">has free KV slots</text>
-      <text x="500" y="440" fill="#7a8399" font-size="9.5" font-family="'Geist Mono',monospace" text-anchor="middle">streams tokens</text>
+      <text x="500" y="404" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">D1 (decode)</text>
+      <text x="500" y="424" fill="#7a8399" font-size="9.5" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">有空闲 KV 槽位</text>
+      <text x="500" y="440" fill="#7a8399" font-size="9.5" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">流式产出 token</text>
 
       <!-- KV blocks: hot replicated / cold swapped -->
-      <text x="640" y="366" fill="#7a8399" font-size="9" font-family="'Geist Mono',monospace" letter-spacing="0.10em">CACHE BLOCKS</text>
-      <g font-family="'Geist Mono',monospace" font-size="8.5" text-anchor="middle">
-        <rect x="640" y="376" width="70" height="26" rx="3" fill="rgba(235,108,54,0.14)" stroke="#eb6c36"/><text x="675" y="393" fill="#2d3142">hot · rep×3</text>
-        <rect x="720" y="376" width="70" height="26" rx="3" fill="rgba(235,108,54,0.14)" stroke="#eb6c36"/><text x="755" y="393" fill="#2d3142">hot · rep×3</text>
-        <rect x="800" y="376" width="70" height="26" rx="3" fill="rgba(235,108,54,0.14)" stroke="#eb6c36"/><text x="835" y="393" fill="#2d3142">hot · rep×3</text>
-        <rect x="640" y="410" width="70" height="26" rx="3" fill="rgba(79,93,117,0.10)" stroke="#4f5d75"/><text x="675" y="427" fill="#4f5d75">warm</text>
-        <rect x="720" y="410" width="70" height="26" rx="3" fill="rgba(79,93,117,0.10)" stroke="#4f5d75"/><text x="755" y="427" fill="#4f5d75">warm</text>
-        <rect x="800" y="410" width="70" height="26" rx="3" fill="none" stroke="rgba(79,93,117,0.45)" stroke-dasharray="4,3"/><text x="835" y="424" fill="#7a8399">cold →</text><text x="835" y="434" fill="#7a8399">storage</text>
+      <text x="640" y="366" fill="#7a8399" font-size="9" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.10em">缓存块</text>
+      <g font-family="'Geist Mono','Noto Sans CJK SC',monospace" font-size="8.5" text-anchor="middle">
+        <rect x="640" y="376" width="70" height="26" rx="3" fill="rgba(235,108,54,0.14)" stroke="#eb6c36"/><text x="675" y="393" fill="#2d3142">热 · 复制×3</text>
+        <rect x="720" y="376" width="70" height="26" rx="3" fill="rgba(235,108,54,0.14)" stroke="#eb6c36"/><text x="755" y="393" fill="#2d3142">热 · 复制×3</text>
+        <rect x="800" y="376" width="70" height="26" rx="3" fill="rgba(235,108,54,0.14)" stroke="#eb6c36"/><text x="835" y="393" fill="#2d3142">热 · 复制×3</text>
+        <rect x="640" y="410" width="70" height="26" rx="3" fill="rgba(79,93,117,0.10)" stroke="#4f5d75"/><text x="675" y="427" fill="#4f5d75">温</text>
+        <rect x="720" y="410" width="70" height="26" rx="3" fill="rgba(79,93,117,0.10)" stroke="#4f5d75"/><text x="755" y="427" fill="#4f5d75">温</text>
+        <rect x="800" y="410" width="70" height="26" rx="3" fill="none" stroke="rgba(79,93,117,0.45)" stroke-dasharray="4,3"/><text x="835" y="424" fill="#7a8399">冷 →</text><text x="835" y="434" fill="#7a8399">存储</text>
       </g>
-      <text x="890" y="393" fill="#7a8399" font-size="9" font-family="'Geist',sans-serif">popular</text>
-      <text x="890" y="405" fill="#7a8399" font-size="9" font-family="'Geist',sans-serif">prefixes get</text>
-      <text x="890" y="417" fill="#7a8399" font-size="9" font-family="'Geist',sans-serif">copied so more</text>
-      <text x="890" y="429" fill="#7a8399" font-size="9" font-family="'Geist',sans-serif">workers can hit</text>
+      <text x="890" y="393" fill="#7a8399" font-size="9" font-family="'Geist','Noto Sans CJK SC',sans-serif">热门前缀</text>
+      <text x="890" y="405" fill="#7a8399" font-size="9" font-family="'Geist','Noto Sans CJK SC',sans-serif">多复制几份，</text>
+      <text x="890" y="417" fill="#7a8399" font-size="9" font-family="'Geist','Noto Sans CJK SC',sans-serif">让更多 worker</text>
+      <text x="890" y="429" fill="#7a8399" font-size="9" font-family="'Geist','Noto Sans CJK SC',sans-serif">都能命中</text>
 
-      <text x="60" y="512" fill="#7a8399" font-size="10.5" font-family="'Geist',sans-serif">The scheduler estimates end-to-end time for each pair — including how long the KV blocks take to move — and picks the pair that meets the SLO.</text>
-      <text x="60" y="532" fill="#7a8399" font-size="10.5" font-family="'Geist',sans-serif">Prefill and decode scale as separate pools, so a hot prefix can be served by many decoders without re-running prefill.</text>
+      <text x="60" y="512" fill="#7a8399" font-size="10.5" font-family="'Geist','Noto Sans CJK SC',sans-serif">调度器为每一对估算端到端时间——含 KV 块搬移耗时——并挑出满足 SLO 的那一对。</text>
+      <text x="60" y="532" fill="#7a8399" font-size="10.5" font-family="'Geist','Noto Sans CJK SC',sans-serif">prefill 与 decode 作为独立池各自伸缩，因此一个热前缀能被多台 decode 服务，无需重跑 prefill。</text>
     </svg>
   </div>
 </body>

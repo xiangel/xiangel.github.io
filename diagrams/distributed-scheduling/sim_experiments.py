@@ -50,6 +50,20 @@ plt.rcParams.update(
     }
 )
 
+# 中文字体：优先 Noto Sans CJK SC（本地已装），拉丁字符也用它，保证中英混排一致
+for _fp in (
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+):
+    if os.path.exists(_fp):
+        try:
+            font_manager.fontManager.addfont(_fp)
+        except Exception:
+            pass
+plt.rcParams["font.sans-serif"] = ["Noto Sans CJK SC", "WenQuanYi Micro Hei", "DejaVu Sans"]
+plt.rcParams["font.family"] = "sans-serif"
+plt.rcParams["axes.unicode_minus"] = False
+
 
 # ----------------------------------------------------------------------------
 # 公共前置：带共享前缀的请求流
@@ -125,15 +139,15 @@ def exp_a():
         print(f"    W={W:2d}  round-robin={rr[i]:5.1f}  cache-aware={ca[i]:5.1f}")
 
     fig, ax = plt.subplots(figsize=(7.2, 4.2))
-    ax.plot(Ws, ca, "-o", color=ACCENT, lw=2.4, label="cache-aware routing")
+    ax.plot(Ws, ca, "-o", color=ACCENT, lw=2.4, label="cache-aware 路由")
     ax.plot(Ws, rr, "-o", color=MUTED, lw=2.0, label="round-robin")
     ax.set_xscale("log", base=2)
     ax.set_xticks(Ws)
     ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
-    ax.set_xlabel("number of workers")
-    ax.set_ylabel("cluster prefix-cache hit rate (%)")
+    ax.set_xlabel("worker 数量")
+    ax.set_ylabel("集群前缀缓存命中率 (%)")
     ax.set_ylim(0, 100)
-    ax.set_title("Cache-aware routing keeps hit rate high as the cluster grows",
+    ax.set_title("集群变大时，cache-aware 路由让命中率保持高位",
                  color=INK, fontsize=12)
     ax.legend(frameon=False)
     fig.tight_layout()
@@ -180,8 +194,8 @@ def exp_b(W=8, n=20000, n_groups=120, cap_groups=40):
         imbalance = load.max() / load.mean()
         return hit_tok / tot_tok * 100, imbalance
 
-    names = {"affinity": "pure affinity", "balance": "power-of-two (balance)",
-             "e2": "E2 (Preble)", "sglang": "cache-aware + balance (SGLang)"}
+    names = {"affinity": "纯亲和", "balance": "power-of-two（均衡）",
+             "e2": "E2（Preble）", "sglang": "cache-aware + 均衡（SGLang）"}
     res = {}
     print("[B] hit rate vs load imbalance")
     for pol in ("affinity", "balance", "e2", "sglang"):
@@ -206,9 +220,9 @@ def exp_b(W=8, n=20000, n_groups=120, cap_groups=40):
         dx, dy, ha = label_off[pol]
         ax.annotate(names[pol], (imb, h), textcoords="offset points",
                     xytext=(dx, dy), ha=ha, color=INK, fontsize=9.5)
-    ax.set_xlabel("load imbalance  (max worker load / mean)  →  worse")
-    ax.set_ylabel("cluster prefix-cache hit rate (%)  →  better")
-    ax.set_title("Affinity vs balance: the sweet spot is a blend",
+    ax.set_xlabel("负载不均（最大 worker 负载 / 均值） → 越差")
+    ax.set_ylabel("集群前缀缓存命中率 (%) → 越好")
+    ax.set_title("亲和 vs 均衡：甜点是两者的折中",
                  color=INK, fontsize=12, pad=14)
     ax.set_ylim(78, 104)
     ax.set_xlim(0.9, 2.15)
@@ -282,16 +296,16 @@ def exp_c(horizon_ms=60000):
     print(f"    goodput {g1/max(g0,1e-9):.2f}x, wasted compute {(1 - w1/max(w0,1))*100:.0f}% lower")
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8.6, 4.2))
-    labels = ["accept-all", "early-reject"]
+    labels = ["来者不拒", "早拒绝"]
     ax1.bar(labels, [g0, g1], color=[MUTED, ACCENT], width=0.6)
-    ax1.set_ylabel("goodput (SLO-meeting req/s)")
-    ax1.set_title("Goodput under overload", color=INK, fontsize=11)
+    ax1.set_ylabel("goodput（满足 SLO 的 req/s）")
+    ax1.set_title("过载下的 goodput", color=INK, fontsize=11)
     ax2.bar(labels, [w0 / 1e6, w1 / 1e6], color=[MUTED, ACCENT], width=0.6)
-    ax2.set_ylabel("wasted prefill (M tokens)")
-    ax2.set_title("Compute wasted on doomed requests", color=INK, fontsize=11)
+    ax2.set_ylabel("白烧的 prefill（百万 token）")
+    ax2.set_title("浪费在注定失败请求上的算力", color=INK, fontsize=11)
     for ax in (ax1, ax2):
         ax.grid(axis="x", visible=False)
-    fig.suptitle("Early rejection: spend compute only on requests that can meet SLO",
+    fig.suptitle("早拒绝：只把算力花在能满足 SLO 的请求上",
                  color=INK, fontsize=12)
     fig.tight_layout(rect=[0, 0, 1, 0.95])
     fig.savefig(os.path.join(OUT, "sim-early-rejection.png"), dpi=150)

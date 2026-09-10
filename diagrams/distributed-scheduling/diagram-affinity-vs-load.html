@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh">
 <head>
   <meta charset="UTF-8">
   <title>Affinity vs load</title>
@@ -21,18 +21,18 @@
       <rect width="100%" height="100%" fill="#f5f5f5"/>
       <rect width="100%" height="100%" fill="url(#d3)" opacity="0.55"/>
 
-      <text x="60" y="46" fill="#4f5d75" font-size="11" font-family="'Geist Mono',monospace" letter-spacing="0.18em">AFFINITY vs LOAD</text>
-      <text x="60" y="80" fill="#2d3142" font-size="26" font-family="'Instrument Serif',serif">When to stick to the cache, when to spread the load</text>
+      <text x="60" y="46" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.18em">亲和 vs 均衡</text>
+      <text x="60" y="80" fill="#2d3142" font-size="26" font-family="'Instrument Serif','Noto Serif CJK SC',serif">何时黏着缓存，何时摊开负载</text>
 
       <!-- ===== THE TENSION ===== -->
-      <text x="60" y="128" fill="#4f5d75" font-size="11" font-family="'Geist Mono',monospace" letter-spacing="0.14em">THE TENSION</text>
+      <text x="60" y="128" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.14em">矛盾所在</text>
 
       <!-- card 1: pure affinity -->
       <rect x="60" y="142" width="420" height="150" rx="8" fill="#ffffff" stroke="rgba(45,49,66,0.18)"/>
-      <text x="80" y="168" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist',sans-serif">Pure affinity</text>
-      <text x="80" y="185" fill="#7a8399" font-size="10" font-family="'Geist',sans-serif">hot prefix always lands on the same worker</text>
+      <text x="80" y="168" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">纯亲和</text>
+      <text x="80" y="185" fill="#7a8399" font-size="10" font-family="'Geist','Noto Sans CJK SC',sans-serif">热前缀永远落到同一台 worker</text>
       <!-- load bars -->
-      <g font-family="'Geist Mono',monospace" font-size="9" text-anchor="middle">
+      <g font-family="'Geist Mono','Noto Sans CJK SC',monospace" font-size="9" text-anchor="middle">
         <rect x="110" y="210" width="46" height="60" rx="3" fill="rgba(235,108,54,0.18)" stroke="#eb6c36"/>
         <text x="133" y="285" fill="#4f5d75">W1</text>
         <rect x="200" y="252" width="46" height="18" rx="3" fill="rgba(79,93,117,0.12)" stroke="#4f5d75"/>
@@ -40,54 +40,54 @@
         <rect x="290" y="256" width="46" height="14" rx="3" fill="rgba(79,93,117,0.12)" stroke="#4f5d75"/>
         <text x="313" y="285" fill="#4f5d75">W3</text>
       </g>
-      <text x="360" y="222" fill="#eb6c36" font-size="10" font-weight="600" font-family="'Geist',sans-serif">hit ↑</text>
-      <text x="360" y="240" fill="#eb6c36" font-size="10" font-weight="600" font-family="'Geist',sans-serif">hotspot ✗</text>
-      <text x="360" y="262" fill="#7a8399" font-size="9" font-family="'Geist',sans-serif">W1 melts,</text>
-      <text x="360" y="275" fill="#7a8399" font-size="9" font-family="'Geist',sans-serif">rest idle</text>
+      <text x="360" y="222" fill="#eb6c36" font-size="10" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">命中 ↑</text>
+      <text x="360" y="240" fill="#eb6c36" font-size="10" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">热点 ✗</text>
+      <text x="360" y="262" fill="#7a8399" font-size="9" font-family="'Geist','Noto Sans CJK SC',sans-serif">W1 被压垮，</text>
+      <text x="360" y="275" fill="#7a8399" font-size="9" font-family="'Geist','Noto Sans CJK SC',sans-serif">其余空转</text>
 
       <!-- card 2: pure balance -->
       <rect x="500" y="142" width="480" height="150" rx="8" fill="#ffffff" stroke="rgba(45,49,66,0.18)"/>
-      <text x="520" y="168" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist',sans-serif">Pure balance</text>
-      <text x="520" y="185" fill="#7a8399" font-size="10" font-family="'Geist',sans-serif">spread evenly, ignore what is cached</text>
-      <g font-family="'Geist Mono',monospace" font-size="9" text-anchor="middle">
-        <rect x="550" y="234" width="46" height="36" rx="3" fill="rgba(79,93,117,0.12)" stroke="#4f5d75"/><text x="573" y="285" fill="#4f5d75">W1</text><text x="573" y="228" fill="#7a8399">miss</text>
-        <rect x="640" y="230" width="46" height="40" rx="3" fill="rgba(79,93,117,0.12)" stroke="#4f5d75"/><text x="663" y="285" fill="#4f5d75">W2</text><text x="663" y="224" fill="#7a8399">miss</text>
-        <rect x="730" y="234" width="46" height="36" rx="3" fill="rgba(79,93,117,0.12)" stroke="#4f5d75"/><text x="753" y="285" fill="#4f5d75">W3</text><text x="753" y="228" fill="#7a8399">miss</text>
+      <text x="520" y="168" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">纯均衡</text>
+      <text x="520" y="185" fill="#7a8399" font-size="10" font-family="'Geist','Noto Sans CJK SC',sans-serif">均匀摊开，无视缓存</text>
+      <g font-family="'Geist Mono','Noto Sans CJK SC',monospace" font-size="9" text-anchor="middle">
+        <rect x="550" y="234" width="46" height="36" rx="3" fill="rgba(79,93,117,0.12)" stroke="#4f5d75"/><text x="573" y="285" fill="#4f5d75">W1</text><text x="573" y="228" fill="#7a8399">未命中</text>
+        <rect x="640" y="230" width="46" height="40" rx="3" fill="rgba(79,93,117,0.12)" stroke="#4f5d75"/><text x="663" y="285" fill="#4f5d75">W2</text><text x="663" y="224" fill="#7a8399">未命中</text>
+        <rect x="730" y="234" width="46" height="36" rx="3" fill="rgba(79,93,117,0.12)" stroke="#4f5d75"/><text x="753" y="285" fill="#4f5d75">W3</text><text x="753" y="228" fill="#7a8399">未命中</text>
       </g>
-      <text x="820" y="238" fill="#4f5d75" font-size="10" font-weight="600" font-family="'Geist',sans-serif">balanced ✓</text>
-      <text x="820" y="256" fill="#4f5d75" font-size="10" font-weight="600" font-family="'Geist',sans-serif">hit ↓</text>
-      <text x="820" y="278" fill="#7a8399" font-size="9" font-family="'Geist',sans-serif">everyone recomputes</text>
+      <text x="820" y="238" fill="#4f5d75" font-size="10" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">均衡 ✓</text>
+      <text x="820" y="256" fill="#4f5d75" font-size="10" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">命中 ↓</text>
+      <text x="820" y="278" fill="#7a8399" font-size="9" font-family="'Geist','Noto Sans CJK SC',sans-serif">人人都在重算</text>
 
       <!-- ===== THE BLEND ===== -->
-      <text x="60" y="340" fill="#eb6c36" font-size="11" font-family="'Geist Mono',monospace" letter-spacing="0.14em">THE BLEND · Preble E2 decision rule</text>
+      <text x="60" y="340" fill="#eb6c36" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.14em">折中方案 · Preble E2 判据</text>
 
       <rect x="60" y="356" width="140" height="60" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.30)"/>
-      <text x="130" y="382" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">new request</text>
-      <text x="130" y="399" fill="#7a8399" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">prefix P, suffix S</text>
+      <text x="130" y="382" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">新请求</text>
+      <text x="130" y="399" fill="#7a8399" font-size="9" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">前缀 P，后缀 S</text>
       <line x1="200" y1="386" x2="252" y2="386" stroke="#2d3142" stroke-width="1.8" marker-end="url(#a3)"/>
 
       <!-- diamond -->
       <polygon points="400,338 560,420 400,502 240,420" fill="rgba(235,108,54,0.06)" stroke="#eb6c36" stroke-width="1.4"/>
-      <text x="400" y="404" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">reuse &gt; recompute?</text>
-      <text x="400" y="424" fill="#7a8399" font-size="9.5" font-family="'Geist Mono',monospace" text-anchor="middle">matched prefix &gt; remaining</text>
-      <text x="400" y="438" fill="#7a8399" font-size="9.5" font-family="'Geist Mono',monospace" text-anchor="middle">tokens to compute</text>
+      <text x="400" y="404" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">复用 &gt; 重算？</text>
+      <text x="400" y="424" fill="#7a8399" font-size="9.5" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">匹配前缀 &gt; 剩余</text>
+      <text x="400" y="438" fill="#7a8399" font-size="9.5" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">待算 token 数</text>
 
       <!-- YES branch (exploit) -->
       <line x1="560" y1="420" x2="640" y2="420" stroke="#eb6c36" stroke-width="1.8" marker-end="url(#a3A)"/>
-      <text x="600" y="410" fill="#eb6c36" font-size="10" font-family="'Geist Mono',monospace" text-anchor="middle">YES</text>
+      <text x="600" y="410" fill="#eb6c36" font-size="10" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">是</text>
       <rect x="640" y="386" width="330" height="68" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36"/>
-      <text x="660" y="412" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif">Exploit → send to the cache owner</text>
-      <text x="660" y="432" fill="#7a8399" font-size="10" font-family="'Geist',sans-serif">savings are worth queuing behind it</text>
+      <text x="660" y="412" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">Exploit → 发给缓存所在机器</text>
+      <text x="660" y="432" fill="#7a8399" font-size="10" font-family="'Geist','Noto Sans CJK SC',sans-serif">省下的量值得为它排队</text>
 
       <!-- NO branch (explore) -->
       <line x1="400" y1="502" x2="400" y2="524" stroke="#4f5d75" stroke-width="1.8"/>
       <line x1="400" y1="524" x2="640" y2="524" stroke="#4f5d75" stroke-width="1.8" marker-end="url(#a3M)"/>
-      <text x="360" y="520" fill="#4f5d75" font-size="10" font-family="'Geist Mono',monospace">NO</text>
+      <text x="360" y="520" fill="#4f5d75" font-size="10" font-family="'Geist Mono','Noto Sans CJK SC',monospace">否</text>
       <rect x="640" y="492" width="330" height="60" rx="6" fill="rgba(79,93,117,0.08)" stroke="#4f5d75"/>
-      <text x="660" y="516" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif">Explore → send to the least-loaded</text>
-      <text x="660" y="534" fill="#7a8399" font-size="10" font-family="'Geist',sans-serif">little to reuse, so keep the cluster even</text>
+      <text x="660" y="516" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">Explore → 发给负载最轻的</text>
+      <text x="660" y="534" fill="#7a8399" font-size="10" font-family="'Geist','Noto Sans CJK SC',sans-serif">没多少可复用，那就保持集群均衡</text>
 
-      <text x="60" y="582" fill="#7a8399" font-size="10" font-family="'Geist',sans-serif">SGLang uses the same idea with a load guardrail: fall back to the least-loaded worker whenever the cache owner is more than 1.5× the mean load.</text>
+      <text x="60" y="582" fill="#7a8399" font-size="10" font-family="'Geist','Noto Sans CJK SC',sans-serif">SGLang 用同一思路加了道负载护栏：一旦缓存所在机器超过均值负载的 1.5×，就回退到负载最轻的 worker。</text>
     </svg>
   </div>
 </body>

@@ -257,3 +257,13 @@ PD 分离的主线,还是那条"发现问题 → 引入优化 → 带出新问�
 一句话带走:**PD 分离是用"一次 KV 搬运的成本",换来"两个阶段各自最优 + 互不干扰"——这笔账只有在互连够快、负载够重、prompt 够长时才划算。**
 
 延伸阅读(也是**第五篇**的主题):当 prefill 池、decode 池、KV 池散布在**整个集群**上,谁来决定一个请求去哪台 prefill、哪台 decode?怎么让路由**感知 KV 缓存在哪**(命中就省一次 prefill)、怎么在过载时**提前拒绝**注定超时的请求?这就是 **Mooncake Conductor** 那套 **KVCache-centric 全局调度**要回答的——下一篇见。
+
+## 参考
+
+1. Zhong et al., [_DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving_](https://arxiv.org/abs/2401.09670)（goodput 目标 + 带宽感知放置），OSDI 2024.
+2. Patel et al., [_Splitwise: Efficient Generative LLM Inference Using Phase Splitting_](https://arxiv.org/abs/2311.18677)（异构硬件分工 + 三池 + layer-wise 传输），ISCA 2024.
+3. Qin et al., [_Mooncake: A KVCache-centric Disaggregated Architecture for LLM Serving_](https://arxiv.org/abs/2407.00079)（分布式 KV 池 + Conductor 全局调度），FAST 2025.
+4. Agrawal et al., [_Taming Throughput-Latency Tradeoff in LLM Inference with Sarathi-Serve_](https://arxiv.org/abs/2403.02310)（chunked prefill，单机对照基线），OSDI 2024.
+5. vLLM 文档，[_Disaggregated Prefilling_](https://docs.vllm.ai/en/latest/features/disagg_prefill.html)（`kv_producer`/`kv_consumer`、NixlConnector / MooncakeConnector、xPyD）.
+6. NVIDIA, [_Dynamo_](https://github.com/ai-dynamo/dynamo)（PrefillRouter + 全局 prefill 队列 + 运行时可重配 xPyD）；配套介绍见 [NVIDIA 技术博客](https://developer.nvidia.com/blog/introducing-nvidia-dynamo-a-low-latency-distributed-inference-framework-for-scaling-reasoning-ai-models/).
+7. NVIDIA, [_NIXL: NVIDIA Inference Xfer Library_](https://github.com/ai-dynamo/nixl)（非阻塞点对点 KV 传输，RDMA/IB/UCX/NVMe/S3 后端）.

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Early rejection</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:#f5f5f5}.frame{width:1000px}svg{width:100%;display:block}
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <svg viewBox="0 0 1000 540" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="d5" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"/></pattern>
+        <marker id="a5" markerWidth="9" markerHeight="7" refX="7" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" fill="#4f5d75"/></marker>
+        <marker id="a5A" markerWidth="9" markerHeight="7" refX="7" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" fill="#eb6c36"/></marker>
+      </defs>
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+      <rect width="100%" height="100%" fill="url(#d5)" opacity="0.55"/>
+
+      <text x="60" y="46" fill="#4f5d75" font-size="11" font-family="'Geist Mono',monospace" letter-spacing="0.18em">ADMISSION CONTROL · EARLY REJECTION</text>
+      <text x="60" y="80" fill="#2d3142" font-size="26" font-family="'Instrument Serif',serif">Reject at the door, not after the work</text>
+
+      <!-- ===== Lane A ===== -->
+      <text x="60" y="128" fill="#4f5d75" font-size="11" font-family="'Geist Mono',monospace" letter-spacing="0.14em">A · ACCEPT EVERYTHING</text>
+      <!-- arrivals -->
+      <text x="60" y="176" fill="#7a8399" font-size="9.5" font-family="'Geist Mono',monospace">overload</text>
+      <g fill="rgba(79,93,117,0.35)"><circle cx="70" cy="196" r="5"/><circle cx="86" cy="196" r="5"/><circle cx="102" cy="196" r="5"/><circle cx="78" cy="212" r="5"/><circle cx="94" cy="212" r="5"/><circle cx="70" cy="228" r="5"/><circle cx="86" cy="228" r="5"/><circle cx="102" cy="228" r="5"/></g>
+      <line x1="118" y1="212" x2="168" y2="212" stroke="#4f5d75" stroke-width="1.6" marker-end="url(#a5)"/>
+      <!-- accept -->
+      <rect x="172" y="184" width="120" height="56" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.30)"/>
+      <text x="232" y="208" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">accept all</text>
+      <text x="232" y="224" fill="#7a8399" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">queue grows</text>
+      <line x1="292" y1="212" x2="332" y2="212" stroke="#4f5d75" stroke-width="1.6" marker-end="url(#a5)"/>
+      <!-- prefill (compute spent) -->
+      <rect x="336" y="184" width="140" height="56" rx="6" fill="rgba(235,108,54,0.10)" stroke="#eb6c36"/>
+      <text x="406" y="205" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">prefill runs</text>
+      <text x="406" y="222" fill="#eb6c36" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">GPU time spent</text>
+      <line x1="476" y1="212" x2="516" y2="212" stroke="#4f5d75" stroke-width="1.6" marker-end="url(#a5)"/>
+      <!-- SLO check -->
+      <rect x="520" y="184" width="130" height="56" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.30)"/>
+      <text x="585" y="205" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">TTFT check</text>
+      <text x="585" y="222" fill="#7a8399" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">too late by now</text>
+      <!-- outcomes -->
+      <line x1="650" y1="200" x2="700" y2="188" stroke="#4f5d75" stroke-width="1.6" marker-end="url(#a5)"/>
+      <line x1="650" y1="224" x2="700" y2="248" stroke="#4f5d75" stroke-width="1.6" marker-end="url(#a5)"/>
+      <rect x="704" y="168" width="120" height="40" rx="6" fill="rgba(79,93,117,0.08)" stroke="#4f5d75"/>
+      <text x="764" y="185" fill="#4f5d75" font-size="11" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">few ✓</text>
+      <text x="764" y="200" fill="#7a8399" font-size="9" font-family="'Geist',sans-serif" text-anchor="middle">on time</text>
+      <rect x="704" y="228" width="276" height="44" rx="6" fill="rgba(235,108,54,0.10)" stroke="#eb6c36"/>
+      <text x="720" y="248" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist',sans-serif">many ✗ dropped AFTER prefill</text>
+      <text x="720" y="264" fill="#eb6c36" font-size="9" font-family="'Geist',sans-serif">compute already burned — pure waste</text>
+      <text x="836" y="188" fill="#7a8399" font-size="9" font-family="'Geist',sans-serif">← rare</text>
+
+      <line x1="60" y1="304" x2="980" y2="304" stroke="rgba(45,49,66,0.10)"/>
+
+      <!-- ===== Lane B ===== -->
+      <text x="60" y="348" fill="#eb6c36" font-size="11" font-family="'Geist Mono',monospace" letter-spacing="0.14em">B · EARLY REJECTION  (check the pool before prefill)</text>
+      <text x="60" y="396" fill="#7a8399" font-size="9.5" font-family="'Geist Mono',monospace">overload</text>
+      <g fill="rgba(79,93,117,0.35)"><circle cx="70" cy="416" r="5"/><circle cx="86" cy="416" r="5"/><circle cx="102" cy="416" r="5"/><circle cx="78" cy="432" r="5"/><circle cx="94" cy="432" r="5"/><circle cx="70" cy="448" r="5"/><circle cx="86" cy="448" r="5"/><circle cx="102" cy="448" r="5"/></g>
+      <line x1="118" y1="432" x2="168" y2="432" stroke="#4f5d75" stroke-width="1.6" marker-end="url(#a5)"/>
+      <!-- gate -->
+      <rect x="172" y="404" width="150" height="56" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1.4"/>
+      <text x="247" y="425" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">admission gate</text>
+      <text x="247" y="442" fill="#7a8399" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">inflight &lt; capacity?</text>
+      <!-- reject branch (up) -->
+      <line x1="247" y1="404" x2="247" y2="372" stroke="#eb6c36" stroke-width="1.6" marker-end="url(#a5A)"/>
+      <rect x="332" y="356" width="270" height="34" rx="6" fill="#ffffff" stroke="rgba(235,108,54,0.5)"/>
+      <text x="247" y="366" fill="#eb6c36" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">NO</text>
+      <line x1="322" y1="373" x2="332" y2="373" stroke="#eb6c36" stroke-width="1.6"/>
+      <text x="346" y="371" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist',sans-serif">✗ rejected instantly</text>
+      <text x="346" y="384" fill="#eb6c36" font-size="9" font-family="'Geist',sans-serif">zero compute — client retries elsewhere</text>
+      <!-- accept branch (right) -->
+      <line x1="322" y1="432" x2="362" y2="432" stroke="#4f5d75" stroke-width="1.6" marker-end="url(#a5)"/>
+      <text x="342" y="424" fill="#4f5d75" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">YES</text>
+      <rect x="366" y="404" width="120" height="56" rx="6" fill="rgba(235,108,54,0.10)" stroke="#eb6c36"/>
+      <text x="426" y="428" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">prefill</text>
+      <text x="426" y="444" fill="#eb6c36" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">only survivors</text>
+      <line x1="486" y1="432" x2="526" y2="432" stroke="#4f5d75" stroke-width="1.6" marker-end="url(#a5)"/>
+      <rect x="530" y="404" width="120" height="56" rx="6" fill="rgba(79,93,117,0.10)" stroke="#4f5d75"/>
+      <text x="590" y="428" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif" text-anchor="middle">decode</text>
+      <text x="590" y="444" fill="#7a8399" font-size="9" font-family="'Geist Mono',monospace" text-anchor="middle">has a slot</text>
+      <line x1="650" y1="432" x2="690" y2="432" stroke="#4f5d75" stroke-width="1.6" marker-end="url(#a5)"/>
+      <rect x="694" y="404" width="286" height="56" rx="6" fill="rgba(235,108,54,0.10)" stroke="#eb6c36"/>
+      <text x="710" y="428" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist',sans-serif">every admitted request meets SLO ✓</text>
+      <text x="710" y="446" fill="#eb6c36" font-size="9" font-family="'Geist',sans-serif">compute spent only on requests that can finish in time</text>
+
+      <text x="60" y="512" fill="#7a8399" font-size="10.5" font-family="'Geist',sans-serif">Reject on arrival using the load a request will face (max of prefill and decode pool), so no GPU time is spent on requests doomed to miss the deadline.</text>
+    </svg>
+  </div>
+</body>
+</html>

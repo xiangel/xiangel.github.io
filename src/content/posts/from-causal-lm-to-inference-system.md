@@ -151,9 +151,9 @@ Sarathi-Serve、DistServe 等工作的动机都从这里来：要么把长 prefi
 
 ## 参考
 
-1. Vaswani et al., _Attention Is All You Need_, 2017.
-2. Radford et al., GPT-2（`past` 即 KV 缓存）。
-3. Yu et al., _Orca_, OSDI 2022.
-4. Kwon et al., _PagedAttention_, SOSP 2023.
-5. Agrawal et al., _Sarathi-Serve_, OSDI 2024.
-6. Zhong et al., _DistServe_, OSDI 2024.
+1. Vaswani et al., [_Attention Is All You Need_](https://arxiv.org/abs/1706.03762), 2017.
+2. Radford et al., [_Language Models are Unsupervised Multitask Learners_](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf)（GPT-2，`past` 即 KV 缓存），2019.
+3. Yu et al., [_Orca: A Distributed Serving System for Transformer-Based Generative Models_](https://www.usenix.org/conference/osdi22/presentation/yu), OSDI 2022.
+4. Kwon et al., [_Efficient Memory Management for Large Language Model Serving with PagedAttention_](https://arxiv.org/abs/2309.06180), SOSP 2023.
+5. Agrawal et al., [_Taming Throughput-Latency Tradeoff in LLM Inference with Sarathi-Serve_](https://arxiv.org/abs/2403.02310), OSDI 2024.
+6. Zhong et al., [_DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving_](https://arxiv.org/abs/2401.09670), OSDI 2024.

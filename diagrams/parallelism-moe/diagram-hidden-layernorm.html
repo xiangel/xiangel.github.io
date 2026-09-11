@@ -21,14 +21,14 @@
       <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"/>
 
       <text x="40" y="36" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.16em">HIDDEN SIZE · LAYER NORM</text>
-      <text x="40" y="70" fill="#2d3142" font-size="24" font-family="'Instrument Serif','Noto Serif CJK SC',serif">一个字是一排数字；归一化每个字自己做</text>
-      <text x="40" y="96" fill="#7a8399" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">TP 把这排数字从中间切开。SP 不切这排数字，只决定哪几个字做归一化。</text>
+      <text x="40" y="70" fill="#2d3142" font-size="24" font-family="'Instrument Serif','Noto Serif CJK SC',serif">一个 token 是一条 H 维向量；LayerNorm 每个 token 自己做</text>
+      <text x="40" y="96" fill="#7a8399" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">TP 沿 hidden size 切开。SP 不切窄这条向量，只决定哪些 token 做 LayerNorm。</text>
 
       <!-- ===== panel A: one token ===== -->
       <rect x="40" y="116" width="920" height="268" rx="10" fill="#ffffff" stroke="rgba(45,49,66,0.16)"/>
       <rect x="56" y="132" width="36" height="16" rx="2" fill="transparent" stroke="#eb6c36"/>
       <text x="74" y="144" fill="#eb6c36" font-size="9" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">A</text>
-      <text x="102" y="145" fill="#2d3142" font-size="15" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">一个词进来，先变成一条数字</text>
+      <text x="102" y="145" fill="#2d3142" font-size="15" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">一个 token 进来，先编成一条向量</text>
 
       <rect x="56" y="168" width="88" height="72" rx="8" fill="rgba(235,108,54,0.08)" stroke="#eb6c36"/>
       <text x="100" y="200" fill="#2d3142" font-size="22" font-weight="600" font-family="'Instrument Serif','Noto Serif CJK SC',serif" text-anchor="middle">猫</text>
@@ -46,28 +46,28 @@
         <rect x="540" y="176" width="52" height="56" rx="5" fill="rgba(79,93,117,0.12)" stroke="#4f5d75"/><text x="566" y="209" fill="#2d3142" font-size="12">h₆</text>
         <rect x="596" y="176" width="52" height="56" rx="5" fill="rgba(79,93,117,0.12)" stroke="#4f5d75"/><text x="622" y="209" fill="#2d3142" font-size="12">h₇</text>
       </g>
-      <text x="426" y="252" fill="#2d3142" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">这一排有多长，就叫 hidden size（H）</text>
-      <text x="426" y="274" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">图里画 8 格方便看；70B 常见是 4096 或 8192</text>
+      <text x="426" y="252" fill="#2d3142" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">这条向量有多长，就叫 hidden size（H）</text>
+      <text x="426" y="274" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">图里画 8 维方便看；70B 常见是 4096 或 8192</text>
 
       <rect x="680" y="168" width="256" height="88" rx="8" fill="rgba(235,108,54,0.06)" stroke="#eb6c36"/>
-      <text x="808" y="198" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">TP 切的就是这一排的宽度</text>
+      <text x="808" y="198" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">TP 切的就是 hidden size</text>
       <text x="808" y="220" fill="#eb6c36" font-size="12" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">橙 = GPU 0　灰 = GPU 1</text>
-      <text x="808" y="240" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">这一排越长，权重表越装不下</text>
+      <text x="808" y="240" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">H 越大，权重矩阵越装不下</text>
 
-      <text x="56" y="308" fill="#4f5d75" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">B = 同时几条请求，S = 这句话几个字，H = 每个字那一排数字有多长。</text>
-      <text x="56" y="334" fill="#4f5d75" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">算一层就是「这排数字 × 一张大表」。表太宽装不下，就把每个字切成左右两半，两张卡各算一半。这就是 TP。</text>
-      <text x="56" y="360" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">同一个字、同一层；算完把两半加回去，才得到这个字的完整结果。</text>
+      <text x="56" y="308" fill="#4f5d75" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">B = 同时几条请求，S = 序列几个 token，H = 每个 token 的 hidden size。</text>
+      <text x="56" y="334" fill="#4f5d75" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">算一层就是「token 向量 × 权重矩阵」。矩阵太宽装不下，就把 hidden size 切成左右两半。这就是 TP。</text>
+      <text x="56" y="360" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">同一个 token、同一层；算完 all-reduce 把两半加回去，才得到完整的 H 维结果。</text>
 
       <!-- ===== panel B: layernorm vs linear ===== -->
       <rect x="40" y="404" width="920" height="388" rx="10" fill="#ffffff" stroke="rgba(45,49,66,0.16)"/>
       <rect x="56" y="420" width="36" height="16" rx="2" fill="transparent" stroke="#4f5d75"/>
       <text x="74" y="432" fill="#4f5d75" font-size="9" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">B</text>
-      <text x="102" y="433" fill="#2d3142" font-size="15" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">一层里：线性层切了，归一化还拿着整段话</text>
+      <text x="102" y="433" fill="#2d3142" font-size="15" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">一层里：线性层切了，LayerNorm 还拿着整段序列</text>
 
-      <text x="56" y="464" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">这句话 8 个字。归一化几乎没有权重，却要给每个字做一次，而且每个字只用自己那一排数字。</text>
+      <text x="56" y="464" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">这段序列 8 个 token。LayerNorm 几乎没有权重，却要对每个 token 做一次，而且每个 token 只用自己那条 H 维向量。</text>
 
       <!-- token row -->
-      <text x="56" y="496" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.08em">一段话 · S = 8</text>
+      <text x="56" y="496" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.08em">序列 · S = 8</text>
       <g font-family="'Geist Mono','Noto Sans CJK SC',monospace" font-size="11" text-anchor="middle">
         <rect x="56" y="508" width="96" height="40" rx="5" fill="rgba(235,108,54,0.12)" stroke="#eb6c36"/><text x="104" y="533" fill="#2d3142">今</text>
         <rect x="160" y="508" width="96" height="40" rx="5" fill="rgba(235,108,54,0.12)" stroke="#eb6c36"/><text x="208" y="533" fill="#2d3142">天</text>
@@ -81,13 +81,13 @@
 
       <!-- LN full -->
       <rect x="56" y="564" width="824" height="52" rx="6" fill="rgba(235,108,54,0.06)" stroke="#eb6c36"/>
-      <text x="468" y="586" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">LayerNorm · 每个字自己做，不看邻居</text>
-      <text x="468" y="606" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">所以可以分工：这几个字归这张卡做，那几个字归那张卡做</text>
+      <text x="468" y="586" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">LayerNorm · 每个 token 自己做，不看邻居</text>
+      <text x="468" y="606" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">所以可以按序列维分工：这些 token 归这张卡，那些归那张卡</text>
 
       <!-- SP split -->
       <rect x="56" y="632" width="408" height="52" rx="6" fill="rgba(235,108,54,0.12)" stroke="#eb6c36"/>
       <text x="260" y="654" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">SP · GPU 0 只做「今天天气」的归一化</text>
-      <text x="260" y="672" fill="#7a8399" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">字没切窄，只是这几个字归它做</text>
+      <text x="260" y="672" fill="#7a8399" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">H 没切窄，只是这几个 token 归它做</text>
       <rect x="472" y="632" width="408" height="52" rx="6" fill="rgba(79,93,117,0.10)" stroke="#4f5d75"/>
       <text x="676" y="654" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">SP · GPU 1 只做「真好啊。」的归一化</text>
       <text x="676" y="672" fill="#7a8399" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">注意力前还要拼回来</text>
@@ -95,9 +95,9 @@
       <!-- Attention not cut -->
       <rect x="56" y="700" width="824" height="52" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.28)"/>
       <text x="468" y="722" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">Attention · SP 不进这里</text>
-      <text x="468" y="740" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">算注意力时 Q 仍要看见整段 KV。真要把注意力按词切开，那是后面的 CP，不是 SP。</text>
+      <text x="468" y="740" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">算注意力时 Q 仍要看见整段 KV。真要把注意力按 token 切开，那是后面的 CP，不是 SP。</text>
 
-      <text x="500" y="778" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">口诀：TP 把每个字切成左右两半　·　SP 不切窄，只分工做归一化　·　CP 才拆注意力</text>
+      <text x="500" y="778" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">口诀：TP 沿 hidden size 切开　·　SP 不切窄，只分工做 LayerNorm　·　CP 才拆注意力</text>
     </svg>
   </div>
 </body>

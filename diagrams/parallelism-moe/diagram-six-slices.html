@@ -27,7 +27,7 @@
       <rect x="40" y="110" width="292" height="400" rx="10" fill="#ffffff" stroke="rgba(45,49,66,0.16)"/>
       <rect x="56" y="126" width="36" height="16" rx="2" fill="transparent" stroke="#eb6c36"/>
       <text x="74" y="138" fill="#eb6c36" font-size="9" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">TP</text>
-      <text x="100" y="139" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">切每个词的宽度 · 每层都在</text>
+      <text x="100" y="139" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">切 hidden size · 每层都在</text>
       <rect x="56" y="156" width="260" height="18" rx="3" fill="rgba(79,93,117,0.10)" stroke="#4f5d75"/>
       <text x="186" y="169" fill="#2d3142" font-size="10" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">Embed · 词表也按 TP 切</text>
       <!-- 4 layers, each attn/ffn with 4 vertical stripes -->
@@ -142,7 +142,7 @@
       <text x="186" y="716" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">Attention · 不切</text>
       <text x="186" y="734" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">Q 仍要看见整段 KV</text>
       <rect x="56" y="752" width="260" height="36" rx="4" fill="#ffffff" stroke="rgba(45,49,66,0.22)"/>
-      <text x="186" y="774" fill="#2d3142" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">FFN 仍按 TP 切每个词的宽度</text>
+      <text x="186" y="774" fill="#2d3142" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">FFN 仍按 TP 切 hidden size</text>
       <text x="186" y="854" fill="#4f5d75" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">结构看起来还是完整一层</text>
       <text x="186" y="872" fill="#eb6c36" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">all-gather 之后再做注意力</text>
       <text x="186" y="890" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">KV 并不变少</text>
@@ -191,7 +191,7 @@
       <text x="814" y="872" fill="#eb6c36" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">dispatch / combine all-to-all</text>
       <text x="814" y="890" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">墙钟看最热门的那个专家</text>
 
-      <text x="500" y="956" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">对照口诀：DP 复制整网 · PP 横切层栈 · TP 竖切每个词的宽度 · SP 切 Norm · CP 切注意力 · EP 切专家</text>
+      <text x="500" y="956" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">对照口诀：DP 复制整网 · PP 横切层栈 · TP 竖切 hidden size · SP 切 Norm · CP 切注意力 · EP 切专家</text>
     </svg>
   </div>
 </body>

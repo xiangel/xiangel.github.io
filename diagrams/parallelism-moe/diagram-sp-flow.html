@@ -21,14 +21,14 @@
       <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"/>
 
       <text x="40" y="36" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.16em">SEQUENCE PARALLEL · MEGATRON SP</text>
-      <text x="40" y="70" fill="#2d3142" font-size="24" font-family="'Instrument Serif','Noto Serif CJK SC',serif">SP 只决定：这几个词谁来做归一化</text>
-      <text x="40" y="96" fill="#7a8399" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">不把词切窄（那是 TP），也不拆注意力（那是 CP）。每个词的向量仍然完整。</text>
+      <text x="40" y="70" fill="#2d3142" font-size="24" font-family="'Instrument Serif','Noto Serif CJK SC',serif">SP 只决定：这些 token 谁来做 LayerNorm</text>
+      <text x="40" y="96" fill="#7a8399" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">不切 hidden size（那是 TP），也不拆注意力（那是 CP）。每个 token 仍是完整的 H 维向量。</text>
 
       <!-- A -->
       <rect x="40" y="116" width="920" height="196" rx="10" fill="#ffffff" stroke="rgba(45,49,66,0.16)"/>
       <rect x="56" y="132" width="36" height="16" rx="2" fill="transparent" stroke="#eb6c36"/>
       <text x="74" y="144" fill="#eb6c36" font-size="9" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">A</text>
-      <text x="102" y="145" fill="#2d3142" font-size="15" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">LayerNorm 每个词自己算，不看邻居</text>
+      <text x="102" y="145" fill="#2d3142" font-size="15" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">LayerNorm 每个 token 自己算，不看邻居</text>
 
       <g font-family="'Instrument Serif','Noto Serif CJK SC',serif" font-size="22" text-anchor="middle">
         <rect x="64" y="168" width="88" height="72" rx="8" fill="rgba(235,108,54,0.10)" stroke="#eb6c36"/>
@@ -79,30 +79,30 @@
       <rect x="40" y="540" width="920" height="332" rx="10" fill="#ffffff" stroke="rgba(45,49,66,0.16)"/>
       <rect x="56" y="556" width="36" height="16" rx="2" fill="transparent" stroke="#eb6c36"/>
       <text x="74" y="568" fill="#eb6c36" font-size="9" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">C</text>
-      <text x="102" y="569" fill="#2d3142" font-size="15" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">加上 SP：归一化分家 → 注意力前拼回整句 → 再分家</text>
+      <text x="102" y="569" fill="#2d3142" font-size="15" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">加上 SP：归一化分家 → 注意力前拼回整段序列 → 再分家</text>
 
       <text x="56" y="600" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace">1 · LayerNorm 分家</text>
       <rect x="56" y="610" width="280" height="64" rx="6" fill="rgba(235,108,54,0.10)" stroke="#eb6c36"/>
       <text x="196" y="636" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">GPU 0 · 今　天</text>
-      <text x="196" y="656" fill="#7a8399" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">只做这两个词的归一化</text>
+      <text x="196" y="656" fill="#7a8399" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">只做这两个 token 的 LayerNorm</text>
       <rect x="348" y="610" width="280" height="64" rx="6" fill="rgba(79,93,117,0.10)" stroke="#4f5d75"/>
       <text x="488" y="636" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">GPU 1 · 真　好</text>
-      <text x="488" y="656" fill="#7a8399" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">只做这两个词的归一化</text>
+      <text x="488" y="656" fill="#7a8399" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">只做这两个 token 的 LayerNorm</text>
       <rect x="644" y="610" width="292" height="64" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.22)"/>
-      <text x="790" y="636" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">每个词仍是完整 H</text>
-      <text x="790" y="656" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">SP 不切宽度，只切「哪几个词」</text>
+      <text x="790" y="636" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">每个 token 仍是完整 H</text>
+      <text x="790" y="656" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">SP 不切 H，只切「哪些 token」</text>
 
       <line x1="196" y1="674" x2="196" y2="696" stroke="#eb6c36" stroke-width="1.6" marker-end="url(#arA)"/>
       <line x1="488" y1="674" x2="488" y2="696" stroke="#eb6c36" stroke-width="1.6" marker-end="url(#arA)"/>
-      <text x="790" y="692" fill="#eb6c36" font-size="12" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">all-gather 拼回整句</text>
+      <text x="790" y="692" fill="#eb6c36" font-size="12" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">all-gather 拼回整段序列</text>
 
       <text x="56" y="720" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace">2 · Attention · SP 到此停</text>
       <rect x="56" y="728" width="572" height="52" rx="6" fill="rgba(235,108,54,0.06)" stroke="#eb6c36"/>
       <text x="342" y="750" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">今　天　真　好　都在</text>
-      <text x="342" y="768" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">问「今」必须看见后三个词。KV 并不变少。</text>
+      <text x="342" y="768" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">问「今」必须看见后三个 token。KV 并不变少。</text>
       <rect x="644" y="728" width="292" height="52" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.22)"/>
       <text x="790" y="750" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">这里仍走 TP</text>
-      <text x="790" y="768" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">按宽度 / 头切开，不是按词</text>
+      <text x="790" y="768" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">按 H / 头切开，不是按 token</text>
 
       <line x1="342" y1="780" x2="342" y2="802" stroke="#2d3142" stroke-width="1.6" marker-end="url(#ar)"/>
       <text x="790" y="798" fill="#4f5d75" font-size="12" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">reduce-scatter 再分家</text>
@@ -113,7 +113,7 @@
       <rect x="348" y="832" width="280" height="24" rx="4" fill="rgba(79,93,117,0.10)" stroke="#4f5d75"/>
       <text x="488" y="849" fill="#2d3142" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">GPU 1 又只留 真　好</text>
 
-      <text x="500" y="886" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">省的是归一化时那堆数字占的显存，不是权重，也不是已经生成的 KV</text>
+      <text x="500" y="886" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">省的是 LayerNorm 时激活占的显存，不是权重，也不是已经生成的 KV</text>
     </svg>
   </div>
 </body>

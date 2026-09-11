@@ -20,11 +20,11 @@ description: 推理里怎么把模型切开：用 decoder 结构图对照 TP / S
 
 这是本系列第六篇。[第一篇](/posts/from-causal-lm-to-inference-system/)把"权重怎么切到多卡"点过题；[第四篇](/posts/llm-inference-pd-disaggregation/)说了 prefill 想要小 TP、decode 想要大 TP，但没解释这些缩写在切什么；[第五篇](/posts/llm-inference-scheduling-distributed/)把请求派到了某台机器。这一篇钻进那台机器所属的并行组。
 
-先把一张卡上装的东西说成人话。用户打进来几个字，模型把**每个字变成一条数字向量**。这条向量有多长，就叫 **hidden size**（记作 H）——70B 常见是 4096 或 8192。几个请求、一段话叠在一起，写成 `[B, S, H]`：
+先把一张卡上装的东西说成人话。输入会被切成一个个 **token**，模型把**每个 token 编成一条向量**。这条向量有多长，就叫 **hidden size**（记作 H）——70B 常见是 4096 或 8192。几个请求、一段序列叠在一起，写成 `[B, S, H]`：
 
 - **B**：同时进来几条请求
-- **S**：这段话有多长（几个 token）
-- **H**：每个字那条向量有多宽
+- **S**：这段序列有多长（几个 token）
+- **H**：每个 token 那条向量有多宽（hidden size）
 
 Decoder 就是 Embed → 重复 N 层（归一化 → 注意力 → 前馈）→ LM Head。一张卡要同时装三样东西：全部权重、已经生成的 KV、当前这一层的激活。六种并行各切哪一维、为什么要切，都放在第一节；后面各节只补切开之后的机制和账单。
 
@@ -44,15 +44,15 @@ Decoder 就是 Embed → 重复 N 层（归一化 → 注意力 → 前馈）→
 
 **PP。** 整网太大，最容易想到按层切开 → 前几层一张卡、后几层另一张卡。通信只在阶段边界点对点。新问题是**气泡**：decode 常常一步一个 token，流水线灌不满。第三节写公式。
 
-**TP。** 每个字会变成一排数字，70B 常见是 4096 个。算一层，就是拿这排数字去乘一张很大的权重表。表太宽，一张卡装不下。办法是把这张表竖着切开：GPU 0 只算每个字**左边那一半**数字，GPU 1 只算**右边那一半**。同一个字、同一层，两张卡同时干，只是各算半截宽度。算完要把两半加回去，才得到这个字的完整结果。**切的是「每个字有多宽」，不是「这句话有几个字」。** 怎么切矩阵，第四节写。
+**TP。** 每个 token 是一条长度为 **hidden size**（H）的向量，70B 常见是 4096 或 8192 维。一层线性层就是这条向量乘一张很大的权重矩阵；矩阵的一边等于 H，H 越大越装不下。张量并行把这条宽度切开：GPU 0 算每个 token 向量的左半段，GPU 1 算右半段。同一个 token、同一层，两张卡同时算，只是各算 hidden 的一半。算完做一次 all-reduce，把两半加回去，才得到完整的 H 维结果。**切的是 hidden size，不是序列长度 S。** 怎么切矩阵，第四节写。
 
-**SP。** 权重表切开了，可还有一步叫归一化（LayerNorm）：把一个字自己那排数字捋顺。这一步几乎没有权重，却要给这句话里每一个字都做一次。关键是：「今」的归一化只用「今」自己，不看「天」。所以可以分工——GPU 0 只给「今 / 天」做，GPU 1 只给「真 / 好」做。**字还是完整的那一排数字，没有再切窄；只是这几个字归谁做。** 问「今」后面接什么时（注意力），必须看见整句话，所以进注意力前还要把字拼回来。SP 不省已经生成的 KV，也不能单独开，得先有 TP。约束写在第五节。
+**SP。** 权重矩阵切开了，可还有 LayerNorm / RMSNorm：对**每个 token 自己那条 H 维向量**做归一化。这一步几乎没有权重，却要对序列里每一个 token 做一次。关键是：token「今」的 LayerNorm 只用它自己那条向量，不看「天」。所以可以按序列维分工——GPU 0 只给「今 / 天」做 LayerNorm，GPU 1 只给「真 / 好」做。**每个 token 的向量仍然是完整的 H 维，没有再切窄；切开的是「哪些 token 在这张卡上」。** Attention 不行：Q 必须看见整段序列，所以进 Attention 前要把切开的 token **all-gather** 拼回来。SP 不省 KV Cache，也不能单独开，必须已经有 TP。约束写在第五节。
 
-两件事容易混在一起。先看「一个字 = 一排数字，TP 把这排数字从中间切开」；再看「归一化每个字自己做，SP 只决定哪几个字在哪张卡上」。第二张图把分家、拼回整句、再分家画在一起。
+两件事容易混在一起。先看「一个 token = 一条 H 维向量，TP 沿 hidden size 切开」；再看「LayerNorm 每个 token 自己做，SP 只决定哪些 token 在哪张卡上」。第二张图把分家、拼回整段序列、再分家画在一起。
 
-![一个字是一排数字，TP 把这排从中间切开；归一化每个字自己做，SP 只决定哪几个字在哪张卡上](/assets/posts/llm-inference-parallelism-moe/diagram-hidden-layernorm.png)
+![一个 token 是一条 H 维向量，TP 沿 hidden size 切开；LayerNorm 每个 token 自己做，SP 只决定哪些 token 在哪张卡上](/assets/posts/llm-inference-parallelism-moe/diagram-hidden-layernorm.png)
 
-![LayerNorm 每个词自己算；只开 TP 时两张卡都握着整句；加上 SP 后归一化分家，进注意力前再拼回来](/assets/posts/llm-inference-parallelism-moe/diagram-sp-flow.png)
+![LayerNorm 每个 token 自己算；只开 TP 时两张卡都握着整段序列；加上 SP 后归一化分家，进注意力前再 all-gather 拼回来](/assets/posts/llm-inference-parallelism-moe/diagram-sp-flow.png)
 
 **CP。** 序列更长，真正爆的是注意力里的 KV → 把注意力看见的那段序列切开。和 SP 名字像，维不是一回事：SP 到 Attention 门口就停，CP 才走进注意力。推理里再分成 **DCP**（不加人，砍掉 TP 复制出来的 KV）和 **PCP**（加卡切 prefill）。第六节写 Ring / Ulysses。
 
@@ -72,8 +72,8 @@ Decoder 就是 Embed → 重复 N 层（归一化 → 注意力 → 前馈）→
 | ------ | -------------------------- | --------------------------------- | ------------------------------ |
 | **DP** | batch / 请求               | 推理里通常**没有**                | 前缀缓存被摊薄                 |
 | **PP** | layers                     | 阶段边界 **点对点**               | 气泡；batch=1 灌不满           |
-| **TP** | 每个字那排数字有多宽       | 层内把两半加回去                  | 跨节点；小消息延迟             |
-| **SP** | 哪几个字做归一化           | 进注意力前先拼回整句              | 被叫成「序列并行」的其实是 CP  |
+| **TP** | hidden size H（token 向量宽度） | 层内 **all-reduce**               | 跨节点；小消息延迟             |
+| **SP** | 哪些 token 做 LayerNorm        | all-gather / reduce-scatter       | 被叫成「序列并行」的其实是 CP  |
 | **CP** | 序列，**含注意力本身**     | Ring 传 KV，或 Ulysses all-to-all | 和 SP 同名；DCP / PCP 还要再分 |
 | **EP** | MoE experts                | dispatch / combine **all-to-all** | 热点专家；两种通信内核不能共存 |
 
@@ -116,7 +116,7 @@ Narayanan 等人给出的理想利用率是 `m / (m + p − 1)`。`p` 是阶段�
 
 ## 四、一层仍然太宽：张量并行 TP
 
-第一节把 TP 说成：每个字是一排数字，权重表太宽，两张卡各算半截，再加回去。一张 H100 是 80 GB，70B 的 bf16 权重就要 140 GB，还没算 KV。下面是 Megatron 怎么切一张线性层的表。
+第一节把 TP 说成：每个 token 是一条长度为 hidden size 的向量，权重矩阵太宽，两张卡各算 hidden 的一半，再 all-reduce 加回去。一张 H100 是 80 GB，70B 的 bf16 权重就要 140 GB，还没算 KV。下面是 Megatron 怎么切一张线性层的矩阵。
 
 一个线性层写成 `Y = X W`。切开的方式有两种，而且在 Transformer 里几乎总是**成对出现**：先 Column Parallel，再 Row Parallel。
 
@@ -145,17 +145,17 @@ Ring all-reduce 的数据量正比于 **(t−1)/t**。这个式子有个不太�
 
 ## 五、线性层切完，归一化还占着序列：序列并行 SP
 
-第一节说过：归一化是「一个字自己捋顺自己那排数字」，所以 GPU 0 可以只做「今 / 天」，GPU 1 只做「真 / 好」。字没有被切窄。注意力不行——问「今」必须看见整句，所以进门前要拼回来。这里只补三件事：必须先有 TP、已经生成的 KV 不会变少、名字别和 Ulysses 撞。
+第一节说过：LayerNorm 是对每个 token 自己那条 H 维向量做归一化，所以 GPU 0 可以只做「今 / 天」，GPU 1 只做「真 / 好」。token 的 hidden size 没有被切窄。Attention 不行——Q 必须看见整段序列，所以进门前要 all-gather 拼回来。这里只补三件事：必须先有 TP、KV Cache 不会变少、名字别和 Ulysses 撞。
 
-Megatron SP 的四步是：归一化按词分家（每卡 `S / t`）→ **all-gather** 拼回整句 → 注意力仍走 TP、**不按词摊 KV** → **reduce-scatter** 再分家。通信量和原来的 all-reduce 差不多，换来的是归一化那段激活每卡只留 `1/t`。DeepSeek-V3 的 attention 写成 **TP4 + SP**，指的就是这套组合。
+Megatron SP 的四步是：LayerNorm 按 token 分家（每卡 `S / t`）→ **all-gather** 拼回整段序列 → 注意力仍走 TP、**不按 token 摊 KV** → **reduce-scatter** 再分家。通信量和原来的 all-reduce 差不多，换来的是归一化那段激活每卡只留 `1/t`。DeepSeek-V3 的 attention 写成 **TP4 + SP**，指的就是这套组合。
 
 三件容易想错的事，可以对照着看：
 
-|            | 切开的是什么           | 每个词的向量还完整吗 | 做注意力时看见整句吗     |
-| ---------- | ---------------------- | -------------------- | ------------------------ |
-| **TP**     | 每个词那条向量的宽度 H | 算矩阵时被切开       | 看见。KV 常常不降        |
-| **SP**     | 哪几个词做归一化       | **完整**，不切宽度   | 看见。先拼回来，**KV 不降** |
-| **CP**     | 哪几个词做注意力       | 完整                 | **不看见整句**，别人的 KV 再传来 |
+|            | 切开的是什么           | 每个 token 的向量还完整吗 | 做注意力时看见整段序列吗     |
+| ---------- | ---------------------- | ------------------------- | ---------------------------- |
+| **TP**     | hidden size H          | 算矩阵时被切开            | 看见。KV 常常不降            |
+| **SP**     | 哪些 token 做 LayerNorm | **完整**，不切 hidden size | 看见。先 all-gather，**KV 不降** |
+| **CP**     | 哪些 token 做注意力     | 完整                      | **不看见整段**，别人的 KV 再传来 |
 
 名字也容易撞。DeepSpeed 把 Ulysses 也叫 Sequence Parallelism，切的其实是注意力，不是 LayerNorm：
 
@@ -169,7 +169,7 @@ Megatron SP 的四步是：归一化按词分家（每卡 `S / t`）→ **all-ga
 
 **影响与约束。** SP 省的是 LayerNorm / Dropout 那截**激活**显存，不是权重，也不是 KV。推理 decode 每步只有一个新 token，激活本来就小，显存收益远小于 prefill——DeepSeek-V3 仍写成 TP4+SP，主要是和 Megatron 的实现绑在一起，顺手把激活路径也切开，不是因为 decode 激活爆了。
 
-硬约束有两条，都容易踩错。第一，**必须已经开 TP**，分家的份数就是 TP 的卡数，SP 不能单独存在。第二，注意力前要把切开的词 **all-gather** 拼回来，Q 仍然看见整段 KV，所以 **KV 并不变少**。把它当成"长上下文方案"会用错：长上下文该找 CP。
+硬约束有两条，都容易踩错。第一，**必须已经开 TP**，分家的份数就是 TP 的卡数，SP 不能单独存在。第二，注意力前要把切开的 token **all-gather** 拼回来，Q 仍然看见整段 KV，所以 **KV 并不变少**。把它当成"长上下文方案"会用错：长上下文该找 CP。
 
 ## 六、序列太长：上下文并行 CP
 
@@ -265,7 +265,7 @@ EP 把两个新问题同时放到台面上。它们不是先后发生的，而�
 
 1. **模型已经装得下、只是排队太长？** 先 DP。接受前缀缓存被摊薄，调度要做亲和。
 2. **整网太大？** 按层切 PP。跨节点做 TP 往往更贵；PP 要接受 decode 的气泡。
-3. **一层仍然太宽？** TP 切每个词那条向量的宽度，SP 切 LayerNorm 的序列。TP 停在 NVLink；头数整除不了就不要硬开。
+3. **一层仍然太宽？** TP 切 hidden size，SP 切 LayerNorm 的序列。TP 停在 NVLink；头数整除不了就不要硬开。
 4. **KV 比权重大、序列很长？** 不要再加大 TP——GQA 会复制 KV。改 CP；decode 用 DCP 砍复制，prefill 长 prompt 才用 PCP 加卡。
 5. **FFN 已经是 MoE？** 专家改 EP，attention 留 TP+SP+DP。`EP = TP × DP` 时，放大 EP 等于放大 DP。
 6. **all-to-all 和热点把墙钟吃掉？** EPLB + DeepEP 两种内核 + TBO；两种内核不能同居，必须 PD 分离。
@@ -283,7 +283,7 @@ EP 把 FFN 按专家切开之后，还可以再走一步：**把 attention 和 M
 
 ## 十、训练里那些同名的并行（不展开）
 
-训练也会切每个词那条向量的宽度、切层、切 batch，缩写经常和推理一样。问题却不是同一套：它要同步梯度、给反向留激活、用大 batch 填流水线。下面只列几种最容易混进来的名字，机制不展开。
+训练也会切 hidden size、切层、切 batch，缩写经常和推理一样。问题却不是同一套：它要同步梯度、给反向留激活、用大 batch 填流水线。下面只列几种最容易混进来的名字，机制不展开。
 
 - **ZeRO / FSDP**：按 DP 维切优化器状态、梯度，ZeRO-3 / FSDP 有时连参数也切开。推理没有优化器，也没有梯度；参数要切，走前面的 TP、PP 或 EP。
 - **1F1B 与虚拟流水线 VPP**：用大 batch 和反向来填 PP 气泡。在线 decode 常常 `m≈1`、没有反向，这两招帮不上忙。所以第三节把 PP 写成推理里的备选，不是 decode 的主方案。
@@ -300,14 +300,14 @@ Megatron SP 最初也是为训练激活发明的——激活要留给反向。�
 
 - **模型已经装得下，人太多** → **DP / DP Attention**。推理不梯度同步。MoE 下 attention 按请求复制，专家按 EP 切。
 - **整网太大** → **PP**。按层切开，气泡是 `(p−1)/(m+p−1)`；decode 常常 batch=1，几乎串行。
-- **一层仍然太宽** → **TP（Megatron 列/行切分，含 vocab parallel）**。切的是每个词那条向量的宽度 H。层内 all-reduce，体积 `(t−1)/t`，最好停在 NVLink 域。
-- **线性层切完，归一化还占着序列** → **SP**。不把词切窄，只决定哪几个词做 LayerNorm；进注意力前再拼回整句。别和 Ulysses 同名混淆。
+- **一层仍然太宽** → **TP（Megatron 列/行切分，含 vocab parallel）**。切的是每个 token 那条向量的 hidden size H。层内 all-reduce，体积 `(t−1)/t`，最好停在 NVLink 域。
+- **线性层切完，归一化还占着序列** → **SP**。不切窄 hidden size，只决定哪些 token 做 LayerNorm；进注意力前再 all-gather 拼回整段序列。别和 Ulysses 同名混淆。
 - **序列太长，KV 比权重大** → **CP**。Ring 传 KV，或 Ulysses 换轴；再拆 DCP（不加人）和 PCP（加卡切 prefill）。
 - **稀疏 FFN 不值得再用 TP 切** → **EP**。dispatch / combine 两次 all-to-all。
 - **all-to-all 贵，路由还不均匀** → **DeepEP 两种内核 + EPLB 冗余副本**。
 - **通信还是和计算同量级** → **Dual-batch overlap**；两种内核不能住在同一通信组里 → **咬合第四篇的 PD 分离**。
 
-一句话带走：**推理并行就是给每一段计算选一种切法——DP 切请求，PP 切层，TP 切每个词那条向量的宽度，SP 切哪几个词做归一化，CP 切注意力看见的序列，EP 切专家。切完立刻要付账：DP 涨吞吐却摊薄缓存，PP 省层却买气泡，TP 省权重但不一定省 KV，SP 不切注意力也不省 KV，CP 才把 KV 切开，EP 把 straggler 和 all-to-all 放到台面上。同名不是同一种切法；DCP 不加卡，PCP 才加。训练里那些同名的并行，第十节点过就够。**
+一句话带走：**推理并行就是给每一段计算选一种切法——DP 切请求，PP 切层，TP 切 hidden size，SP 切哪些 token 做 LayerNorm，CP 切注意力看见的序列，EP 切专家。切完立刻要付账：DP 涨吞吐却摊薄缓存，PP 省层却买气泡，TP 省权重但不一定省 KV，SP 不切注意力也不省 KV，CP 才把 KV 切开，EP 把 straggler 和 all-to-all 放到台面上。同名不是同一种切法；DCP 不加卡，PCP 才加。训练里那些同名的并行，第十节点过就够。**
 
 延伸阅读：下一篇会把负载换成 **long-CoT / 推理模型**。思维链把 decode 拉得很长，KV 占得更久，straggler 和调度的形状都会变——第六节的 CP 就是给那种负载预备的切法，本篇已经摊开。再往后是 GPU 架构与 attention kernel。若还想往 MoE 上再拆一步——把 attention 和 FFN 拆到两类机器上——见 MegaScale-Infer（ByteDance）：它是 EP 之后的另一次模块分离，第九节只点到为止。
 

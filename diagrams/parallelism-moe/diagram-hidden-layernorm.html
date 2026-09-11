@@ -52,11 +52,11 @@
       <rect x="680" y="168" width="256" height="88" rx="8" fill="rgba(235,108,54,0.06)" stroke="#eb6c36"/>
       <text x="808" y="198" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">TP 切的就是这一排的宽度</text>
       <text x="808" y="220" fill="#eb6c36" font-size="12" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">橙 = GPU 0　灰 = GPU 1</text>
-      <text x="808" y="240" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">权重矩阵一边也是 H，H 越大越装不下</text>
+      <text x="808" y="240" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">这一排越长，权重表越装不下</text>
 
-      <text x="56" y="308" fill="#4f5d75" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">一批请求、一段话叠起来，激活就是 [B, S, H]：B = 同时几条请求，S = 这段话有几个词，H = 每个词那条向量有多宽。</text>
-      <text x="56" y="334" fill="#4f5d75" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">线性层是「这条向量 × 一个大矩阵」。矩阵的一边等于 H，所以沿 H 切开 = 把同一层的权重摊到多张卡上。这就是 TP。</text>
-      <text x="56" y="360" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">几张卡算的是同一个词的同一层，只是每人只算向量的一段，算完要对齐一次（all-reduce）。</text>
+      <text x="56" y="308" fill="#4f5d75" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">B = 同时几条请求，S = 这句话几个字，H = 每个字那一排数字有多长。</text>
+      <text x="56" y="334" fill="#4f5d75" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">算一层就是「这排数字 × 一张大表」。表太宽装不下，就把每个字切成左右两半，两张卡各算一半。这就是 TP。</text>
+      <text x="56" y="360" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">同一个字、同一层；算完把两半加回去，才得到这个字的完整结果。</text>
 
       <!-- ===== panel B: layernorm vs linear ===== -->
       <rect x="40" y="404" width="920" height="388" rx="10" fill="#ffffff" stroke="rgba(45,49,66,0.16)"/>
@@ -64,7 +64,7 @@
       <text x="74" y="432" fill="#4f5d75" font-size="9" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">B</text>
       <text x="102" y="433" fill="#2d3142" font-size="15" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">一层里：线性层切了，归一化还拿着整段话</text>
 
-      <text x="56" y="464" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">假设这句话有 8 个词。LayerNorm / RMSNorm 几乎没有权重，却要给每个词做一次归一化，所以激活仍是「整段 × 整条向量」。</text>
+      <text x="56" y="464" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">这句话 8 个字。归一化几乎没有权重，却要给每个字做一次，而且每个字只用自己那一排数字。</text>
 
       <!-- token row -->
       <text x="56" y="496" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.08em">一段话 · S = 8</text>
@@ -81,13 +81,13 @@
 
       <!-- LN full -->
       <rect x="56" y="564" width="824" height="52" rx="6" fill="rgba(235,108,54,0.06)" stroke="#eb6c36"/>
-      <text x="468" y="586" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">LayerNorm / RMSNorm · 每个词都做一次，激活仍是整段</text>
-      <text x="468" y="606" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">几乎无权重，所以 TP 切完线性层，这里的显存还在</text>
+      <text x="468" y="586" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">LayerNorm · 每个字自己做，不看邻居</text>
+      <text x="468" y="606" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">所以可以分工：这几个字归这张卡做，那几个字归那张卡做</text>
 
       <!-- SP split -->
       <rect x="56" y="632" width="408" height="52" rx="6" fill="rgba(235,108,54,0.12)" stroke="#eb6c36"/>
       <text x="260" y="654" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">SP · GPU 0 只做「今天天气」的归一化</text>
-      <text x="260" y="672" fill="#7a8399" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">按序列切开激活</text>
+      <text x="260" y="672" fill="#7a8399" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">字没切窄，只是这几个字归它做</text>
       <rect x="472" y="632" width="408" height="52" rx="6" fill="rgba(79,93,117,0.10)" stroke="#4f5d75"/>
       <text x="676" y="654" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">SP · GPU 1 只做「真好啊。」的归一化</text>
       <text x="676" y="672" fill="#7a8399" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">注意力前还要拼回来</text>
@@ -97,7 +97,7 @@
       <text x="468" y="722" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">Attention · SP 不进这里</text>
       <text x="468" y="740" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">算注意力时 Q 仍要看见整段 KV。真要把注意力按词切开，那是后面的 CP，不是 SP。</text>
 
-      <text x="500" y="778" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">口诀：TP 把每个词切窄　·　SP 把这段话切开，但只切归一化　·　CP 才切注意力</text>
+      <text x="500" y="778" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">口诀：TP 把每个字切成左右两半　·　SP 不切窄，只分工做归一化　·　CP 才拆注意力</text>
     </svg>
   </div>
 </body>

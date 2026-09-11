@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>Tensor parallel column/row</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:#f5f5f5}.frame{width:1000px}svg{width:100%;display:block}
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <svg viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"/></pattern>
+        <marker id="ar" markerWidth="9" markerHeight="7" refX="7" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" fill="#2d3142"/></marker>
+        <marker id="arA" markerWidth="9" markerHeight="7" refX="7" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" fill="#eb6c36"/></marker>
+      </defs>
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+      <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"/>
+
+      <text x="48" y="42" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.18em">TENSOR PARALLEL · MEGATRON</text>
+      <text x="48" y="76" fill="#2d3142" font-size="26" font-family="'Instrument Serif','Noto Serif CJK SC',serif">列切完再行切，中间夹一次 all-reduce</text>
+      <text x="48" y="102" fill="#7a8399" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">一层 MLP / Attention 的标准拆法：Column Parallel → Row Parallel</text>
+
+      <!-- Column parallel -->
+      <text x="48" y="140" fill="#4f5d75" font-size="10" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.12em">1 · 列并行 Column Parallel　Y = X W，按列切 W</text>
+      <rect x="48" y="156" width="72" height="88" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.28)"/>
+      <text x="84" y="194" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">X</text>
+      <text x="84" y="214" fill="#7a8399" font-size="10" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">完整</text>
+      <line x1="124" y1="200" x2="168" y2="200" stroke="#2d3142" stroke-width="1.6" marker-end="url(#ar)"/>
+      <g font-family="'Geist Mono','Noto Sans CJK SC',monospace" font-size="10" text-anchor="middle">
+        <rect x="172" y="156" width="70" height="88" rx="6" fill="rgba(235,108,54,0.10)" stroke="#eb6c36"/>
+        <text x="207" y="188" fill="#2d3142" font-size="11" font-weight="600">W₀</text>
+        <text x="207" y="206" fill="#7a8399">列 0</text>
+        <text x="207" y="222" fill="#7a8399">GPU 0</text>
+        <rect x="250" y="156" width="70" height="88" rx="6" fill="rgba(235,108,54,0.10)" stroke="#eb6c36"/>
+        <text x="285" y="188" fill="#2d3142" font-size="11" font-weight="600">W₁</text>
+        <text x="285" y="206" fill="#7a8399">列 1</text>
+        <text x="285" y="222" fill="#7a8399">GPU 1</text>
+        <rect x="328" y="156" width="70" height="88" rx="6" fill="rgba(235,108,54,0.10)" stroke="#eb6c36"/>
+        <text x="363" y="188" fill="#2d3142" font-size="11" font-weight="600">W₂</text>
+        <text x="363" y="206" fill="#7a8399">列 2</text>
+        <text x="363" y="222" fill="#7a8399">GPU 2</text>
+        <rect x="406" y="156" width="70" height="88" rx="6" fill="rgba(235,108,54,0.10)" stroke="#eb6c36"/>
+        <text x="441" y="188" fill="#2d3142" font-size="11" font-weight="600">W₃</text>
+        <text x="441" y="206" fill="#7a8399">列 3</text>
+        <text x="441" y="222" fill="#7a8399">GPU 3</text>
+      </g>
+      <line x1="480" y1="200" x2="524" y2="200" stroke="#2d3142" stroke-width="1.6" marker-end="url(#ar)"/>
+      <rect x="528" y="156" width="200" height="88" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.28)"/>
+      <text x="628" y="188" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">Y = [Y₀ | Y₁ | Y₂ | Y₃]</text>
+      <text x="628" y="210" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">逻辑上拼接，无需通信</text>
+      <text x="628" y="228" fill="#eb6c36" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">comm = 0</text>
+      <rect x="748" y="168" width="204" height="64" rx="6" fill="rgba(235,108,54,0.06)" stroke="rgba(235,108,54,0.35)"/>
+      <text x="850" y="196" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">QKV / 第一段 FFN</text>
+      <text x="850" y="216" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">按输出维切开</text>
+
+      <!-- Row parallel -->
+      <text x="48" y="280" fill="#4f5d75" font-size="10" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.12em">2 · 行并行 Row Parallel　Y = X W，按行切 W，X 也跟着切</text>
+      <g font-family="'Geist Mono','Noto Sans CJK SC',monospace" font-size="10" text-anchor="middle">
+        <rect x="48" y="296" width="70" height="88" rx="6" fill="rgba(79,93,117,0.10)" stroke="#4f5d75"/>
+        <text x="83" y="328" fill="#2d3142" font-size="11" font-weight="600">X₀</text>
+        <text x="83" y="346" fill="#7a8399">GPU 0</text>
+        <text x="83" y="364" fill="#7a8399">× W₀</text>
+        <rect x="126" y="296" width="70" height="88" rx="6" fill="rgba(79,93,117,0.10)" stroke="#4f5d75"/>
+        <text x="161" y="328" fill="#2d3142" font-size="11" font-weight="600">X₁</text>
+        <text x="161" y="346" fill="#7a8399">GPU 1</text>
+        <text x="161" y="364" fill="#7a8399">× W₁</text>
+        <rect x="204" y="296" width="70" height="88" rx="6" fill="rgba(79,93,117,0.10)" stroke="#4f5d75"/>
+        <text x="239" y="328" fill="#2d3142" font-size="11" font-weight="600">X₂</text>
+        <text x="239" y="346" fill="#7a8399">GPU 2</text>
+        <text x="239" y="364" fill="#7a8399">× W₂</text>
+        <rect x="282" y="296" width="70" height="88" rx="6" fill="rgba(79,93,117,0.10)" stroke="#4f5d75"/>
+        <text x="317" y="328" fill="#2d3142" font-size="11" font-weight="600">X₃</text>
+        <text x="317" y="346" fill="#7a8399">GPU 3</text>
+        <text x="317" y="364" fill="#7a8399">× W₃</text>
+      </g>
+      <line x1="356" y1="340" x2="400" y2="340" stroke="#eb6c36" stroke-width="1.8" marker-end="url(#arA)"/>
+      <rect x="404" y="296" width="220" height="88" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1.4"/>
+      <text x="514" y="328" fill="#eb6c36" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">ALL-REDUCE SUM</text>
+      <text x="514" y="348" fill="#2d3142" font-size="12" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">体积 ∝ (t−1)/t</text>
+      <text x="514" y="366" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">每张卡得到完整 Y</text>
+      <line x1="628" y1="340" x2="672" y2="340" stroke="#2d3142" stroke-width="1.6" marker-end="url(#ar)"/>
+      <rect x="676" y="296" width="88" height="88" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.28)"/>
+      <text x="720" y="340" fill="#2d3142" font-size="16" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">Y</text>
+      <text x="720" y="360" fill="#7a8399" font-size="10" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">完整</text>
+      <rect x="784" y="308" width="168" height="64" rx="6" fill="rgba(79,93,117,0.06)" stroke="rgba(79,93,117,0.35)"/>
+      <text x="868" y="336" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">Out proj / 第二段 FFN</text>
+      <text x="868" y="356" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">按输入维切开</text>
+
+      <!-- NVLink vs IB -->
+      <text x="48" y="424" fill="#4f5d75" font-size="10" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.12em">3 · 通信最好停在节点内</text>
+      <rect x="48" y="440" width="440" height="112" rx="8" fill="rgba(235,108,54,0.06)" stroke="#eb6c36"/>
+      <text x="268" y="468" fill="#eb6c36" font-size="12" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle" letter-spacing="0.10em">NVLINK 域 · 节点内</text>
+      <g font-family="'Geist','Noto Sans CJK SC',sans-serif" font-size="12" font-weight="600" text-anchor="middle">
+        <rect x="72" y="484" width="80" height="44" rx="6" fill="#ffffff" stroke="#eb6c36"/><text x="112" y="511" fill="#2d3142">GPU 0</text>
+        <rect x="164" y="484" width="80" height="44" rx="6" fill="#ffffff" stroke="#eb6c36"/><text x="204" y="511" fill="#2d3142">GPU 1</text>
+        <rect x="256" y="484" width="80" height="44" rx="6" fill="#ffffff" stroke="#eb6c36"/><text x="296" y="511" fill="#2d3142">GPU 2</text>
+        <rect x="348" y="484" width="80" height="44" rx="6" fill="#ffffff" stroke="#eb6c36"/><text x="388" y="511" fill="#2d3142">GPU 3</text>
+      </g>
+      <text x="268" y="542" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">~100s GB/s · TP 加速还在</text>
+
+      <rect x="512" y="440" width="440" height="112" rx="8" fill="#ffffff" stroke="rgba(45,49,66,0.22)"/>
+      <text x="732" y="468" fill="#4f5d75" font-size="12" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle" letter-spacing="0.10em">INFINIBAND · 跨节点</text>
+      <g font-family="'Geist','Noto Sans CJK SC',sans-serif" font-size="12" font-weight="600" text-anchor="middle">
+        <rect x="536" y="484" width="88" height="44" rx="6" fill="rgba(79,93,117,0.08)" stroke="#4f5d75"/><text x="580" y="511" fill="#2d3142">节点 A</text>
+        <rect x="840" y="484" width="88" height="44" rx="6" fill="rgba(79,93,117,0.08)" stroke="#4f5d75"/><text x="884" y="511" fill="#2d3142">节点 B</text>
+      </g>
+      <line x1="628" y1="506" x2="836" y2="506" stroke="#4f5d75" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+      <text x="732" y="498" fill="#eb6c36" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">IB ~10s GB/s</text>
+      <text x="732" y="542" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">通信吃掉加速，TP 不该跨出去</text>
+
+      <text x="500" y="580" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">序列并行 SP 是 TP 的伴生：LayerNorm / Dropout 按序列切开，用来省激活显存</text>
+    </svg>
+  </div>
+</body>
+</html>

@@ -34,3 +34,7 @@ compose.override.yaml
 
 # draw.io skill sidecars
 .drawio-tmp/
+
+# python
+__pycache__/
+*.pyc

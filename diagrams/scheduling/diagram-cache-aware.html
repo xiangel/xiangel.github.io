@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>Cache-aware scheduling</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:#f5f5f5}.frame{width:1000px}svg{width:100%;display:block}
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <svg viewBox="0 0 1000 540" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="d4" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"/></pattern>
+        <marker id="a4" markerWidth="9" markerHeight="7" refX="7" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" fill="#4f5d75"/></marker>
+      </defs>
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+      <rect width="100%" height="100%" fill="url(#d4)" opacity="0.55"/>
+
+      <text x="60" y="46" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.18em">缓存感知调度 · SGLANG</text>
+      <text x="60" y="80" fill="#2d3142" font-size="24" font-family="'Instrument Serif','Noto Serif CJK SC',serif">先 admit 能复用最多 KV 的请求</text>
+
+      <text x="60" y="128" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.12em">已缓存的前缀（radix tree）</text>
+
+      <rect x="140" y="150" width="200" height="52" rx="8" fill="#ffffff" stroke="rgba(45,49,66,0.30)"/>
+      <text x="240" y="172" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">root：「You are …」</text>
+      <text x="240" y="190" fill="#7a8399" font-size="10" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">公共系统提示</text>
+
+      <line x1="200" y1="202" x2="140" y2="248" stroke="#4f5d75" stroke-width="1.4" marker-end="url(#a4)"/>
+      <line x1="280" y1="202" x2="340" y2="248" stroke="#4f5d75" stroke-width="1.4" marker-end="url(#a4)"/>
+
+      <rect x="60" y="252" width="160" height="48" rx="8" fill="rgba(79,93,117,0.10)" stroke="#4f5d75"/>
+      <text x="140" y="281" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">「…Doc A」</text>
+      <rect x="260" y="252" width="160" height="48" rx="8" fill="rgba(235,108,54,0.08)" stroke="#eb6c36"/>
+      <text x="340" y="281" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">「…Doc B」</text>
+
+      <text x="500" y="128" fill="#eb6c36" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.12em">重排：最长匹配前缀优先</text>
+
+      <g font-family="'Geist','Noto Sans CJK SC',sans-serif">
+        <rect x="500" y="150" width="360" height="42" rx="6" fill="rgba(235,108,54,0.10)" stroke="#eb6c36"/>
+        <text x="516" y="176" fill="#2d3142" font-size="13" font-weight="600">Qa  匹配 = root + Doc A（长）</text>
+        <rect x="872" y="158" width="48" height="26" rx="4" fill="#eb6c36"/>
+        <text x="896" y="176" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">1</text>
+
+        <rect x="500" y="202" width="360" height="42" rx="6" fill="rgba(235,108,54,0.10)" stroke="#eb6c36"/>
+        <text x="516" y="228" fill="#2d3142" font-size="13" font-weight="600">Qb  匹配 = root + Doc A（长）</text>
+        <rect x="872" y="210" width="48" height="26" rx="4" fill="#eb6c36"/>
+        <text x="896" y="228" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">2</text>
+
+        <rect x="500" y="254" width="360" height="42" rx="6" fill="rgba(79,93,117,0.08)" stroke="#4f5d75"/>
+        <text x="516" y="280" fill="#2d3142" font-size="13" font-weight="600">Qc  匹配 = root（短）</text>
+        <rect x="872" y="262" width="48" height="26" rx="4" fill="#4f5d75"/>
+        <text x="896" y="280" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">3</text>
+
+        <rect x="500" y="306" width="360" height="42" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.20)"/>
+        <text x="516" y="332" fill="#2d3142" font-size="13" font-weight="600">Qd  匹配 = 无</text>
+        <rect x="872" y="314" width="48" height="26" rx="4" fill="#7a8399"/>
+        <text x="896" y="332" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">4</text>
+      </g>
+      <text x="936" y="250" fill="#7a8399" font-size="10" font-family="'Geist','Noto Sans CJK SC',sans-serif" writing-mode="tb">服务顺序</text>
+
+      <text x="60" y="380" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">缓存复用越多 → prefill 越少 → 吞吐越高</text>
+      <text x="60" y="404" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">风险：完全不匹配的 Qd 可能被饿死，生产里要和公平策略揉在一起。</text>
+      <text x="60" y="448" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif">离线时按最长公共前缀处理，等价于对请求基数树做 DFS，能取得最优命中率。</text>
+    </svg>
+  </div>
+</body>
+</html>

@@ -11,12 +11,12 @@ tags:
   - 上下文并行
   - MoE
   - LLM
-description: 推理里怎么把模型切开：用 decoder 结构图对照 TP / SP / PP / DP / CP / EP 各切哪一段，并写清每刀对显存、通信、延迟和缓存的影响。附 MoE 的 DeepEP / EPLB。训练同名刀只在文末点到。
+description: 推理里怎么把模型切开：用 decoder 结构图对照 TP / SP / PP / DP / CP / EP 各切哪一段，并写清每种并行对显存、通信、延迟和缓存的影响。附 MoE 的 DeepEP / EPLB。训练里同名的并行只在文末点到。
 ---
 
 并行这两个字，在大模型圈子里被用滥了。有人说的 TP，有人说的 SP，还有人把 DeepSpeed 的 Ulysses 也叫序列并行。名字听着像一家，切的维、通信形态、适用场景完全不是一回事。
 
-**本篇只讲推理。** 训练也会切 hidden、切层、切 batch，缩写经常一样，问题却不是同一套——它要同步梯度、给反向留激活、用大 batch 填流水线。那些同名的刀收到文末点一下，这里不展开。
+**本篇只讲推理。** 训练也会切 hidden、切层、切 batch，缩写经常一样，问题却不是同一套——它要同步梯度、给反向留激活、用大 batch 填流水线。那些同名的并行收到文末点一下，这里不展开。
 
 如果你把一个 70B、乃至 DeepSeek-V3 那种 671B 的模型搬上线，很少能靠"再买一张更大的卡"收场。问题会按这个顺序一层层冒出来：
 
@@ -27,17 +27,17 @@ description: 推理里怎么把模型切开：用 decoder 结构图对照 TP / S
 5. **序列太长，注意力的 KV 比权重大** → 沿 token 切开注意力，这是 **CP**（推理里还要再分成 DCP / PCP）。
 6. **模型变成 MoE，单个 expert 已经很小** → 再切 TP 不划算，改切专家，这是 **EP**。
 
-这是本系列第六篇。[第一篇](/posts/from-causal-lm-to-inference-system/)把"权重怎么切到多卡"点过题；[第四篇](/posts/llm-inference-pd-disaggregation/)说了 prefill 想要小 TP、decode 想要大 TP，但没解释这些缩写在切什么；[第五篇](/posts/llm-inference-scheduling-distributed/)把请求派到了某台机器。这一篇钻进那台机器所属的并行组，问三件事：**Model Executor 按哪一维切？切完显存、通信、延迟变成什么样？哪些刀其实不是一回事？**
+这是本系列第六篇。[第一篇](/posts/from-causal-lm-to-inference-system/)把"权重怎么切到多卡"点过题；[第四篇](/posts/llm-inference-pd-disaggregation/)说了 prefill 想要小 TP、decode 想要大 TP，但没解释这些缩写在切什么；[第五篇](/posts/llm-inference-scheduling-distributed/)把请求派到了某台机器。这一篇钻进那台机器所属的并行组，问三件事：**Model Executor 按哪一维切？切完显存、通信、延迟变成什么样？哪些并行其实不是一回事？**
 
-> **说明**：本篇讲的是**推理时模型怎么切开**，不是第五篇那种跨实例的请求路由。Decoder 可以看成一块带着 `[B, S, H]` 的积木：六刀分别切这三个字母，或者切层号、切专家。主线还是那条：**每暴露一个问题，就引入一种优化，又带出新问题。**
+> **说明**：本篇讲的是**推理时模型怎么切开**，不是第五篇那种跨实例的请求路由。Decoder 可以看成一块带着 `[B, S, H]` 的积木：六种并行分别切这三个字母，或者切层号、切专家。主线还是那条：**每暴露一个问题，就引入一种优化，又带出新问题。**
 
 ## Table of contents
 
-## 一、先把所有刀摊在桌上
+## 一、先把各种并行摊开
 
-推理里真正会叠在一起的，是下面这六刀。
+推理里真正会叠在一起的，是下面这六种。
 
-![六刀全景：TP / PP / DP / SP / CP / EP 各切哪一维；Megatron SP 和 Ulysses 同名不是同一刀](/assets/posts/llm-inference-parallelism-moe/diagram-taxonomy.png)
+![六种并行全景：TP / PP / DP / SP / CP / EP 各切哪一维；Megatron SP 和 Ulysses 同名不是同一种切法](/assets/posts/llm-inference-parallelism-moe/diagram-taxonomy.png)
 
 | 并行   | 切开的维                   | 典型通信                          | 推理里干什么                         | 最怕什么                       |
 | ------ | -------------------------- | --------------------------------- | ------------------------------------ | ------------------------------ |
@@ -48,21 +48,21 @@ description: 推理里怎么把模型切开：用 decoder 结构图对照 TP / S
 | **CP** | 序列，**含注意力本身**     | Ring 传 KV，或 Ulysses all-to-all | 切开 KV；再拆 DCP / PCP              | 和 SP 同名；DCP / PCP 还要再分 |
 | **EP** | MoE experts                | dispatch / combine **all-to-all** | 切开稀疏 FFN                         | 热点专家；两种通信内核不能共存 |
 
-读这张表时，盯"切开的维"比盯缩写有用。TP 切的是矩阵的宽，PP 切的是网络的深，DP 切的是请求的份数，SP 切的是**不算注意力的那截激活**，CP 切的才是**注意力看见的那段序列**，EP 切的是专家。**通信的形状，比"用了几张卡"更能决定这刀能不能赚钱。**
+读这张表时，盯"切开的维"比盯缩写有用。TP 切的是矩阵的宽，PP 切的是网络的深，DP 切的是请求的份数，SP 切的是**不算注意力的那截激活**，CP 切的才是**注意力看见的那段序列**，EP 切的是专家。**通信的形状，比"用了几张卡"更能决定这种并行能不能赚钱。**
 
-先把还没切的模型放在桌上。Decoder-only 就是 Embed → N 层（RMSNorm → Attention → FFN）→ LM Head，激活一路带着 `[B, S, H]`。六刀分别切这几个字母，或把 FFN 换成一排专家。
+先看还没切的模型。Decoder-only 就是 Embed → N 层（RMSNorm → Attention → FFN）→ LM Head，激活一路带着 `[B, S, H]`。六种并行分别切这几个字母，或把 FFN 换成一排专家。
 
 ![未切开时一张卡要装下全部权重、KV 和激活；B / S / H / 层号 / 专家是五条可切的缝](/assets/posts/llm-inference-parallelism-moe/diagram-model-backbone.png)
 
-同一份 Embed → 层栈 → Head，六刀切完是六种样子。颜色表示 GPU：哪一块换了颜色，就是这刀切到的结构。
+同一份 Embed → 层栈 → Head，六种并行切完是六种样子。颜色表示 GPU：哪一块换了颜色，就是这种并行切到的结构。
 
 ![TP 竖切每层矩阵；PP 把层栈横切给不同卡；DP 复制整网；SP 只切 Norm 的序列；CP 切 Attention 的 token；EP 只拆 FFN 里的专家](/assets/posts/llm-inference-parallelism-moe/diagram-six-slices.png)
 
-再把镜头推进**一层**。PP 决定这一层住在哪张卡，DP 决定这张卡接哪几条请求；层内的刀落在不同算子上。SP 到 Attention 门口就停，CP 才走进注意力；Dense 的 FFN 用 TP 切 hidden，换成 MoE 就改切专家。
+再把镜头推进**一层**。PP 决定这一层住在哪张卡，DP 决定这张卡接哪几条请求；层内的并行落在不同算子上。SP 到 Attention 门口就停，CP 才走进注意力；Dense 的 FFN 用 TP 切 hidden，换成 MoE 就改切专家。
 
 ![一层 decoder 的数据流：DP 切 B，SP 切 Norm 的 S，TP 切线性层的 H，CP 切 Attention 的 S，EP 切 MoE 专家](/assets/posts/llm-inference-parallelism-moe/diagram-decoder-ops.png)
 
-切开不是免费的。下面这张表和后面各节的「影响与约束」说的是同一件事：省了哪一档显存，立刻多出哪一笔通信，以及什么条件下这刀会反过来变慢。
+切开不是免费的。下面这张表和后面各节的「影响与约束」说的是同一件事：省了哪一档显存，立刻多出哪一笔通信，以及什么条件下这种并行会反过来变慢。
 
 | 并行   | 每卡权重                     | 每卡 KV                        | 同步节奏                      | 硬约束                                   | 推理上最明显的副作用                         |
 | ------ | ---------------------------- | ------------------------------ | ----------------------------- | ---------------------------------------- | -------------------------------------------- |
@@ -81,9 +81,9 @@ description: 推理里怎么把模型切开：用 decoder 结构图对照 TP / S
 
 **DCP 不出现在乘法里**——它只在已有 TP 组里交错切 KV，不新开卡。vLLM 里开了 expert parallel 之后，`EP = TP × DP`。SP 不能单独开，它寄生在 TP 上。所以"开了 32 卡"这句话本身没有信息量：可能是 TP8×DP4，也可能是 EP32，通信形态完全不同。
 
-六刀也可以叠。DeepSeek-V3 线上就是：**attention 走 TP + SP + DP，MoE 走 EP**。长上下文再叠 CP。不是单选，是给每一段计算挑刀。
+这六种也可以叠。DeepSeek-V3 线上就是：**attention 走 TP + SP + DP，MoE 走 EP**。长上下文再叠 CP。不是单选，是给每一段计算挑一种并行。
 
-还有两件不要和这六刀叠在一起。**MegaScale-Infer** 那种把 attention / FFN 拆到两类机器，不是第七种切维，是 EP 之后再做一次**模块分离**，第九节末尾会点到。训练里的 ZeRO、VPP、DualPipe 收到第十节，这里不展开。
+还有两件不要和这六种叠在一起。**MegaScale-Infer** 那种把 attention / FFN 拆到两类机器，不是第七种切维，是 EP 之后再做一次**模块分离**，第九节末尾会点到。训练里的 ZeRO、VPP、DualPipe 收到第十节，这里不展开。
 
 ## 二、一张卡装不下：张量并行 TP
 
@@ -102,7 +102,7 @@ Ring all-reduce 的数据量正比于 **(t−1)/t**。这个式子有个不太�
 
 所以 TP 有一条硬约束：**尽量停在 NVLink 域里**。常见的是单机 8 卡，或者 NVLink 连起来的超节点。H100 节点内 NVLink 是数百 GB/s 这个量级；一出节点，InfiniBand 掉到数十 GB/s，延迟也高一个数量级。同样算一层，NVLink 上加大 TP 往往还在加速，IB 上通信很快反超计算。这也解释了 DeepSeek-V3 为什么把 attention 的 TP **钉死在 4**——论文原话就是用小 TP 限制通信开销。再大，切出来的计算更碎，同步却更密。
 
-词表和 LM Head 通常也跟着 TP 切，叫 **vocab parallel**：embedding 按词表维切开，最后的 softmax 只在各卡的那一段词表上做，再做一个并行的采样。它不是独立的第七刀，是 TP 在模型两头的延伸。
+词表和 LM Head 通常也跟着 TP 切，叫 **vocab parallel**：embedding 按词表维切开，最后的 softmax 只在各卡的那一段词表上做，再做一个并行的采样。它不是独立的第七种并行，是 TP 在模型两头的延伸。
 
 **影响与约束。** 权重按 `1/t` 变薄，这是 TP 能把 70B 塞进多张 80GB 卡的原因。但有三笔账立刻上门。
 
@@ -132,11 +132,11 @@ TP 只切了线性层的权重。LayerNorm、Dropout 这些算子几乎不吃权
 
 **影响与约束。** SP 省的是 LayerNorm / Dropout 那截**激活**显存。推理 decode 每步只有一个新 token，激活本来就小，显存收益远小于 prefill——DeepSeek-V3 仍写成 TP4+SP，主要是和 Megatron 的实现绑在一起，顺手把激活路径也切开，不是因为 decode 激活爆了。
 
-硬约束有两条，都容易踩错。第一，**必须已经开 TP**，SP 不能单独存在。第二，注意力前要把切开的序列 **all-gather** 拼回来，Q 仍然看见整段 KV，所以 **KV 并不变少**。把它当成"长上下文方案"会用错刀：长上下文该找 CP。
+硬约束有两条，都容易踩错。第一，**必须已经开 TP**，SP 不能单独存在。第二，注意力前要把切开的序列 **all-gather** 拼回来，Q 仍然看见整段 KV，所以 **KV 并不变少**。把它当成"长上下文方案"会用错：长上下文该找 CP。
 
 ## 四、出节点太贵：流水线并行 PP
 
-TP 出了节点就不划算。可模型还是太大：8 张卡的 NVLink 域依然装不下整份权重。下一刀改切 **layers**——把连续若干层交给一个**阶段（stage）**，激活算完这一段，再递给下一个阶段。这就是 **流水线并行 PP**。
+TP 出了节点就不划算。可模型还是太大：8 张卡的 NVLink 域依然装不下整份权重。下一维改切 **layers**——把连续若干层交给一个**阶段（stage）**，激活算完这一段，再递给下一个阶段。这就是 **流水线并行 PP**。
 
 ![p=4 个阶段、m=8 个微批次的流水线；斜线格是气泡。气泡比例 (p−1)/(m+p−1)；batch=1 时利用率只剩 1/p](/assets/posts/llm-inference-parallelism-moe/diagram-pp-bubble.png)
 
@@ -152,9 +152,9 @@ Narayanan 等人给出的理想利用率是 `m / (m + p − 1)`。`p` 是阶段�
 
 ## 五、还要吞吐：数据并行 DP，以及 MoE 入口的 DP Attention
 
-TP 和 PP 解决的是"**一份模型怎么切开**"。切完之后，这一份模型一次仍然只能吞一个、或一小批请求。流量再大，单份并行组也会先被请求队列堵住。下一刀是 **复制**：同样的（或已经按 TP 切开的）模型多放几份，各接各的单。这就是 **数据并行 DP**。
+TP 和 PP 解决的是"**一份模型怎么切开**"。切完之后，这一份模型一次仍然只能吞一个、或一小批请求。流量再大，单份并行组也会先被请求队列堵住。下一步是 **复制**：同样的（或已经按 TP 切开的）模型多放几份，各接各的单。这就是 **数据并行 DP**。
 
-**推理里没有梯度**，副本之间默认不说话，所以它看起来最便宜。便宜的代价在别处：每份副本各自缓存各自的 KV。你加的副本越多，同一个前缀就越容易被摊到不同机器上，[第二篇](/posts/kv-cache-paged-attention-and-prefix-caching/)的前缀缓存、[第五篇](/posts/llm-inference-scheduling-distributed/)的缓存感知路由都会被稀释。DP 在 serving 里的正确用法，常常不是再复制一份完整的 70B，而是和别的并行叠在一起，只复制那些**必须按请求切开**的部分。训练里的 ZeRO / FSDP 不要算进这一刀，第十节点一下。
+**推理里没有梯度**，副本之间默认不说话，所以它看起来最便宜。便宜的代价在别处：每份副本各自缓存各自的 KV。你加的副本越多，同一个前缀就越容易被摊到不同机器上，[第二篇](/posts/kv-cache-paged-attention-and-prefix-caching/)的前缀缓存、[第五篇](/posts/llm-inference-scheduling-distributed/)的缓存感知路由都会被稀释。DP 在 serving 里的正确用法，常常不是再复制一份完整的 70B，而是和别的并行叠在一起，只复制那些**必须按请求切开**的部分。训练里的 ZeRO / FSDP 不要算进这种并行，第十节点一下。
 
 MoE 把这件事逼出了一个专门变体：**DP Attention**。
 
@@ -173,9 +173,9 @@ DP Attention 还改写了"DP 不说话"这条。token 从"按请求切"的 atten
 
 ## 六、序列太长：上下文并行 CP
 
-前几刀切的是权重、层、请求。序列一旦拉到 32k、128k，新问题换了对象：**KV Cache 比权重大**。一张卡也许还装得下 70B 的切片，却装不下这条请求已经生成的 KV。TP 帮不上这个忙——GQA / MLA 的 KV 头本来就少，TP 加大以后，每张卡反而要把同一份 KV 再复制一遍。第三节的 SP 也帮不上：它只切 LayerNorm，不切注意力。
+前面切的是权重、层、请求。序列一旦拉到 32k、128k，新问题换了对象：**KV Cache 比权重大**。一张卡也许还装得下 70B 的切片，却装不下这条请求已经生成的 KV。TP 帮不上这个忙——GQA / MLA 的 KV 头本来就少，TP 加大以后，每张卡反而要把同一份 KV 再复制一遍。第三节的 SP 也帮不上：它只切 LayerNorm，不切注意力。
 
-这一刀叫 **上下文并行 CP（Context Parallel）**。把序列按 token 切开，每张卡只负责一段；注意力要用到别人那段 KV 时，再把 KV 转过去。切的是**注意力看见的那段序列**，所以和 Megatron SP 不是一回事。DeepSpeed 把 Ulysses 也叫 Sequence Parallelism，名字撞了，维没撞。
+这种并行叫 **上下文并行 CP（Context Parallel）**。把序列按 token 切开，每张卡只负责一段；注意力要用到别人那段 KV 时，再把 KV 转过去。切的是**注意力看见的那段序列**，所以和 Megatron SP 不是一回事。DeepSpeed 把 Ulysses 也叫 Sequence Parallelism，名字撞了，维没撞。
 
 ![Ring 环形传 KV；Ulysses 两次 all-to-all 换成按头计算；DCP 不增加 GPU，只在 TP 组里交错切 KV](/assets/posts/llm-inference-parallelism-moe/diagram-context-parallel.png)
 
@@ -187,13 +187,13 @@ DP Attention 还改写了"DP 不说话"这条。token 从"按请求切"的 atten
 
 序列一长，该切 CP，而不是把 TP 再加大：Ring 吃的是 `d_kv`，TP 同步吃的是整个 `hidden`，GQA / MLA 下两者能差一个数量级。
 
-推理还要再拆一刀，因为 prefill 和 decode 的 KV 形状完全不同。
+推理还要再拆一次，因为 prefill 和 decode 的 KV 形状完全不同。
 
 **Decode Context Parallel（DCP）。** 不增加 GPU 数。它复用现有 TP 组，按 token 交错把 KV 切开：`token i` 住在 `i % dcp` 那张卡上。GQA 头不够切时，TP 会把 KV 复制 `tp / H` 份；DCP 就是来砍掉这段复制的。vLLM 的开关是 `--decode-context-parallel-size`（也写 `-dcp`），上界大约是 `tp_size / num_kv_heads`。开得越大，KV 越省，通信越重。
 
 **Prefill Context Parallel（PCP）。** 才真正加卡。一条超长 prompt 按序列切开，用来压 TTFT。world size 变成 `TP × PCP`。vLLM 对应 `--prefill-context-parallel-size`。它和 DCP 正交，不要共用一个开关：一个改的是"decode 时 KV 怎么摊在已有卡上"，一个改的是"prefill 要不要多叫几张卡来切序列"。
 
-**影响与约束。** CP 打的是 KV：按 `C` 切开之后，每卡大约只留 `1/C` 的缓存，32k、128k 才装得下。权重几乎没变薄，所以它**补的是 TP 做不到的那一刀**，不是 TP 的替代品。切错维，通信载荷会差一个数量级。
+**影响与约束。** CP 打的是 KV：按 `C` 切开之后，每卡大约只留 `1/C` 的缓存，32k、128k 才装得下。权重几乎没变薄，所以它**补的是 TP 做不到的那一维**，不是 TP 的替代品。切错维，通信载荷会差一个数量级。
 
 通信是每步都要付的。Ring 能和计算重叠，但 hop 随 `C` 涨；Ulysses 一次 all-to-all 在 NVLink 上更快，**头数必须 ≥ CP 度**，跨节点常退回 Ring。Decode 更苛刻：每步只有一个新 Q，却要扫很长的 KV。DCP 复用 TP 组、不加卡，上界大约 `tp / num_kv_heads`，开太大，省下的 HBM 会被通信吃回去。PCP 加卡压 TTFT，会乘进 world size。因果掩码没有被切掉：你分得再碎，逻辑上还是要看完整前缀。
 
@@ -245,7 +245,7 @@ EP 把两个新问题同时放到台面上。它们不是先后发生的，而�
 
 ## 九、生产里怎么配：DeepSeek-V3 与开源框架
 
-把前面的刀叠回去，就是 DeepSeek-V3 论文 §3.4 里的推理单元。最值得盯住的不是某一行的数字，而是：**prefill 和 decode 的并行度故意不一样。** 这正是第四篇说的"阶段专属优化"，落到 MoE 上的具体配法。
+把前面的并行叠回去，就是 DeepSeek-V3 论文 §3.4 里的推理单元。最值得盯住的不是某一行的数字，而是：**prefill 和 decode 的并行度故意不一样。** 这正是第四篇说的"阶段专属优化"，落到 MoE 上的具体配法。
 
 ![Prefill：4 节点 / 32 GPU，attention TP4+SP+DP8，MoE EP32；Decode：40 节点 / 320 GPU，attention TP4+SP+DP80，MoE EP320](/assets/posts/llm-inference-parallelism-moe/diagram-pd-ep-scale.png)
 
@@ -261,7 +261,7 @@ EP 把两个新问题同时放到台面上。它们不是先后发生的，而�
 
 数字本身不是教条。后来 DeepSeek 开源周的系统概述里，decode 单元收成过 **EP144 / 18 节点** 的写法，和论文的 EP320 不是同一版部署。硬件换一代、流量结构一变，具体 EP 会改。不变的是原则：**两阶段不要共用一套并行度。**
 
-选刀的顺序，其实就是开篇那条问题链，只是加上约束之后可以写成检查清单：
+怎么选，其实就是开篇那条问题链，只是加上约束之后可以写成检查清单：
 
 1. **一份模型装不进一张卡？** 先 TP，停在 NVLink；头数整除不了就不要硬开。还不够再叠 PP，但要接受 decode 的气泡。
 2. **KV 比权重大、序列很长？** 不要再加大 TP——GQA 会复制 KV。改 CP；decode 用 DCP 砍复制，prefill 长 prompt 才用 PCP 加卡。
@@ -278,11 +278,11 @@ EP 把两个新问题同时放到台面上。它们不是先后发生的，而�
 
 有一件事两边都成立：没有 PD 分离就强行让同一通信组跑两种 DeepEP 内核，组会卡住。这不是哪个开关没打开，是通信组的语义不允许。
 
-EP 把 FFN 按专家切开之后，还可以再走一步：**把 attention 和 MoE FFN 拆到两类机器上**。ByteDance 的 MegaScale-Infer 做的就是这件事——attention 机器盯 KV 和延迟，专家机器盯吞吐。它不是第七种切维，是模块分离：和[第四篇](/posts/llm-inference-pd-disaggregation/)的 PD 分离同一思路，只是切的对象从"两个阶段"换成"两种算子"。本篇不展开它的调度，只把它从六刀里拿出去，免得和 EP 叠在一起分不清。
+EP 把 FFN 按专家切开之后，还可以再走一步：**把 attention 和 MoE FFN 拆到两类机器上**。ByteDance 的 MegaScale-Infer 做的就是这件事——attention 机器盯 KV 和延迟，专家机器盯吞吐。它不是第七种切维，是模块分离：和[第四篇](/posts/llm-inference-pd-disaggregation/)的 PD 分离同一思路，只是切的对象从"两个阶段"换成"两种算子"。本篇不展开它的调度，只把它从这六种并行里拿出去，免得和 EP 叠在一起分不清。
 
-## 十、训练里那些同名的刀（不展开）
+## 十、训练里那些同名的并行（不展开）
 
-训练也会切 hidden、切层、切 batch，缩写经常和推理一样。问题却不是同一套：它要同步梯度、给反向留激活、用大 batch 填流水线。下面只列几把最容易混进来的名字，机制不展开。
+训练也会切 hidden、切层、切 batch，缩写经常和推理一样。问题却不是同一套：它要同步梯度、给反向留激活、用大 batch 填流水线。下面只列几种最容易混进来的名字，机制不展开。
 
 - **ZeRO / FSDP**：按 DP 维切优化器状态、梯度，ZeRO-3 / FSDP 有时连参数也切开。推理没有优化器，也没有梯度；参数要切，走前面的 TP、PP 或 EP。
 - **1F1B 与虚拟流水线 VPP**：用大 batch 和反向来填 PP 气泡。在线 decode 常常 `m≈1`、没有反向，这两招帮不上忙。所以第四节把 PP 写成推理里的备选，不是 decode 的主方案。
@@ -291,7 +291,7 @@ EP 把 FFN 按专家切开之后，还可以再走一步：**把 attention 和 M
 
 Megatron SP 最初也是为训练激活发明的——激活要留给反向。推理 decode 激活本来就小；V3 写成 TP4+SP，是实现绑在一起，不是 decode 激活爆了。
 
-这些都不改变前面的选刀顺序。推理认的还是那六刀，外加 DeepEP / EPLB / TBO。
+这些都不改变前面的选择顺序。推理认的还是那六种并行，外加 DeepEP / EPLB / TBO。
 
 ## 十一、总结与延伸
 
@@ -306,9 +306,9 @@ Megatron SP 最初也是为训练激活发明的——激活要留给反向。�
 - **all-to-all 贵，路由还不均匀** → **DeepEP 两种内核 + EPLB 冗余副本**。
 - **通信还是和计算同量级** → **Dual-batch overlap**；两种内核不能住在同一通信组里 → **咬合第四篇的 PD 分离**。
 
-一句话带走：**推理并行就是给每一段计算选一刀——TP 切 hidden，SP 切激活，PP 切层，DP 切请求，CP 切序列，EP 切专家。切完立刻要付账：TP 省权重但不一定省 KV，SP 不切注意力，PP 省层却买气泡，DP 涨吞吐却摊薄缓存，CP 才把 KV 切开，EP 把 straggler 和 all-to-all 放到台面上。同名不是同一刀；DCP 不加卡，PCP 才加。训练里那些同名的刀，第十节点过就够。**
+一句话带走：**推理并行就是给每一段计算选一种切法——TP 切 hidden，SP 切激活，PP 切层，DP 切请求，CP 切序列，EP 切专家。切完立刻要付账：TP 省权重但不一定省 KV，SP 不切注意力，PP 省层却买气泡，DP 涨吞吐却摊薄缓存，CP 才把 KV 切开，EP 把 straggler 和 all-to-all 放到台面上。同名不是同一种切法；DCP 不加卡，PCP 才加。训练里那些同名的并行，第十节点过就够。**
 
-延伸阅读：下一篇会把负载换成 **long-CoT / 推理模型**。思维链把 decode 拉得很长，KV 占得更久，straggler 和调度的形状都会变——第六节的 CP 就是给那种负载预备的刀，本篇已经摊开。再往后是 GPU 架构与 attention kernel。若还想往 MoE 上再砍一刀——把 attention 和 FFN 拆到两类机器上——见 MegaScale-Infer（ByteDance）：它是 EP 之后的另一次模块分离，第九节只点到为止。
+延伸阅读：下一篇会把负载换成 **long-CoT / 推理模型**。思维链把 decode 拉得很长，KV 占得更久，straggler 和调度的形状都会变——第六节的 CP 就是给那种负载预备的切法，本篇已经摊开。再往后是 GPU 架构与 attention kernel。若还想往 MoE 上再拆一步——把 attention 和 FFN 拆到两类机器上——见 MegaScale-Infer（ByteDance）：它是 EP 之后的另一次模块分离，第九节只点到为止。
 
 ## 参考
 

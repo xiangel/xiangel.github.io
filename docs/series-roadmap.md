@@ -51,7 +51,7 @@
 | KVCacheManager / BlockPool / RadixCache      | 2        | —                                  |
 | KVConnector / KV transfer                    | 4        | PD 分离                            |
 | Router / 准入 / 扩缩容                       | 5        | 分布式篇                           |
-| Model Executor（TP·SP·PP·DP·CP·EP）          | 6        | 六刀并行 + MoE；CP 不再留给第 8 篇 |
+| Model Executor（TP·SP·PP·DP·CP·EP）          | 6        | 六种并行 + MoE；CP 不再留给第 8 篇 |
 | Attention Kernels（FlashInfer / FA3）        | 8        | GAP → 并入 GPU 架构篇              |
 | Speculative proposer（EAGLE / MTP / n-gram） | 9        | GAP                                |
 | Sampler                                      | 10       | GAP                                |

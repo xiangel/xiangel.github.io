@@ -21,7 +21,7 @@
 
       <text x="40" y="38" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.16em">DECODER-ONLY · 还没切开</text>
       <text x="40" y="72" fill="#2d3142" font-size="26" font-family="'Instrument Serif','Noto Serif CJK SC',serif">先看清模型长什么样，再谈怎么切</text>
-      <text x="40" y="98" fill="#7a8399" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">激活张量一路是 [B, S, H]。六刀分别切 batch、序列、hidden、层，或把 FFN 换成专家。</text>
+      <text x="40" y="98" fill="#7a8399" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">激活张量一路是 [B, S, H]。六种并行分别切 batch、序列、hidden、层，或把 FFN 换成专家。</text>
 
       <!-- tensor legend -->
       <g font-family="'Geist Mono','Noto Sans CJK SC',monospace" font-size="12">
@@ -75,7 +75,7 @@
         <text x="620" y="276">· 全部 KV：每层 Attention 一份，随 S 涨</text>
         <text x="620" y="304">· 全部激活：当前 [B, S, H]</text>
       </g>
-      <text x="620" y="348" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">六刀分别下手的位置</text>
+      <text x="620" y="348" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">六种并行分别下手的位置</text>
       <g font-family="'Geist Mono','Noto Sans CJK SC',monospace" font-size="12" fill="#2d3142">
         <text x="620" y="376">DP 切 B　　CP / SP 切 S　　TP 切 H</text>
         <text x="620" y="400">PP 切层号 N　　EP 切 FFN 里的专家</text>

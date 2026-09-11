@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>Cache-aware routing</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:#f5f5f5}.frame{width:1000px}svg{width:100%;display:block}
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <svg viewBox="0 0 1000 560" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="d2" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"/></pattern>
+        <marker id="a2" markerWidth="9" markerHeight="7" refX="7" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" fill="#4f5d75"/></marker>
+        <marker id="a2A" markerWidth="9" markerHeight="7" refX="7" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" fill="#eb6c36"/></marker>
+      </defs>
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+      <rect width="100%" height="100%" fill="url(#d2)" opacity="0.55"/>
+
+      <text x="60" y="46" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.18em">缓存感知路由</text>
+      <text x="60" y="80" fill="#2d3142" font-size="26" font-family="'Instrument Serif','Noto Serif CJK SC',serif">把请求送到已缓存 KV 的那台机器</text>
+
+      <!-- ============ Panel A: round-robin ============ -->
+      <text x="60" y="132" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.14em">A · ROUND-ROBIN（不看前缀）</text>
+      <!-- request -->
+      <rect x="60" y="150" width="150" height="52" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.30)"/>
+      <text x="135" y="176" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">请求 · docA</text>
+      <text x="135" y="192" fill="#7a8399" font-size="9" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">很长的共享前缀</text>
+      <!-- rotation arrow to W2 -->
+      <path d="M 210,176 H 250 V 176" fill="none" stroke="#4f5d75" stroke-width="1.6"/>
+      <line x1="250" y1="176" x2="250" y2="150" stroke="#4f5d75" stroke-width="1.6"/>
+      <line x1="250" y1="176" x2="470" y2="176" stroke="#4f5d75" stroke-width="1.6" marker-end="url(#a2)"/>
+      <text x="330" y="168" fill="#7a8399" font-size="9" font-family="'Geist Mono','Noto Sans CJK SC',monospace">轮到下一台 → W2</text>
+      <!-- workers -->
+      <g font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">
+        <rect x="300" y="210" width="150" height="66" rx="6" fill="rgba(79,93,117,0.08)" stroke="#4f5d75"/>
+        <text x="375" y="234" fill="#2d3142" font-size="12" font-weight="600">W1</text>
+        <text x="375" y="258" fill="#7a8399" font-size="9.5" font-family="'Geist Mono','Noto Sans CJK SC',monospace">缓存：docA</text>
+
+        <rect x="474" y="210" width="150" height="66" rx="6" fill="rgba(79,93,117,0.08)" stroke="#4f5d75" stroke-width="1"/>
+        <rect x="474" y="210" width="150" height="66" rx="6" fill="none" stroke="#4f5d75" stroke-width="2.4" stroke-dasharray="5,4"/>
+        <text x="549" y="234" fill="#2d3142" font-size="12" font-weight="600">W2 ← 选中</text>
+        <text x="549" y="258" fill="#7a8399" font-size="9.5" font-family="'Geist Mono','Noto Sans CJK SC',monospace">缓存：docB, docC</text>
+
+        <rect x="648" y="210" width="150" height="66" rx="6" fill="rgba(79,93,117,0.08)" stroke="#4f5d75"/>
+        <text x="723" y="234" fill="#2d3142" font-size="12" font-weight="600">W3</text>
+        <text x="723" y="258" fill="#7a8399" font-size="9.5" font-family="'Geist Mono','Noto Sans CJK SC',monospace">缓存：docE</text>
+      </g>
+      <!-- verdict -->
+      <rect x="822" y="210" width="158" height="66" rx="6" fill="rgba(79,93,117,0.06)" stroke="rgba(79,93,117,0.4)"/>
+      <text x="901" y="236" fill="#4f5d75" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">未命中</text>
+      <text x="901" y="256" fill="#7a8399" font-size="9" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">重算 docA</text>
+      <text x="901" y="268" fill="#7a8399" font-size="9" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">完整 prefill</text>
+
+      <line x1="60" y1="306" x2="980" y2="306" stroke="rgba(45,49,66,0.10)"/>
+
+      <!-- ============ Panel B: cache-aware ============ -->
+      <text x="60" y="352" fill="#eb6c36" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.14em">B · CACHE-AWARE（先匹配前缀）</text>
+      <rect x="60" y="370" width="150" height="52" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.30)"/>
+      <text x="135" y="396" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">请求 · docA</text>
+      <text x="135" y="412" fill="#7a8399" font-size="9" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">很长的共享前缀</text>
+      <!-- arrow to W1 -->
+      <line x1="210" y1="396" x2="296" y2="430" stroke="#eb6c36" stroke-width="2" marker-end="url(#a2A)"/>
+      <text x="214" y="388" fill="#eb6c36" font-size="9" font-family="'Geist Mono','Noto Sans CJK SC',monospace">前缀匹配 → W1</text>
+      <g font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">
+        <rect x="300" y="430" width="150" height="66" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1"/>
+        <rect x="300" y="430" width="150" height="66" rx="6" fill="none" stroke="#eb6c36" stroke-width="2.4"/>
+        <text x="375" y="454" fill="#2d3142" font-size="12" font-weight="600">W1 ← 选中</text>
+        <text x="375" y="478" fill="#eb6c36" font-size="9.5" font-family="'Geist Mono','Noto Sans CJK SC',monospace">缓存：docA ✓</text>
+
+        <rect x="474" y="430" width="150" height="66" rx="6" fill="rgba(79,93,117,0.08)" stroke="#4f5d75"/>
+        <text x="549" y="454" fill="#2d3142" font-size="12" font-weight="600">W2</text>
+        <text x="549" y="478" fill="#7a8399" font-size="9.5" font-family="'Geist Mono','Noto Sans CJK SC',monospace">缓存：docB, docC</text>
+
+        <rect x="648" y="430" width="150" height="66" rx="6" fill="rgba(79,93,117,0.08)" stroke="#4f5d75"/>
+        <text x="723" y="454" fill="#2d3142" font-size="12" font-weight="600">W3</text>
+        <text x="723" y="478" fill="#7a8399" font-size="9.5" font-family="'Geist Mono','Noto Sans CJK SC',monospace">缓存：docE</text>
+      </g>
+      <rect x="822" y="430" width="158" height="66" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36"/>
+      <text x="901" y="456" fill="#eb6c36" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">命中</text>
+      <text x="901" y="476" fill="#7a8399" font-size="9" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">跳过 prefill →</text>
+      <text x="901" y="488" fill="#7a8399" font-size="9" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">直接进入 decode</text>
+
+      <text x="60" y="534" fill="#7a8399" font-size="10.5" font-family="'Geist','Noto Sans CJK SC',sans-serif">每台 worker 维护一棵近期前缀的近似 radix tree；router 把请求发给已持有最长匹配的那台。</text>
+    </svg>
+  </div>
+</body>
+</html>

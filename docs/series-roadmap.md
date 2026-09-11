@@ -19,7 +19,7 @@
 | 3   | 推理调度（单机篇）：Continuous Batching 到缓存感知调度 | Scheduler（单机 step 循环）                           | OS 的 CPU 调度       | 排队/批处理吞吐与时延仿真                | ✅   |
 | 4   | PD 分离：把 Prefill 和 Decode 拆到不同 GPU 池          | KVConnector / KV transfer                             | 工厂车间的专业化分工 | P/D 配比与传输开销仿真                   | ✅   |
 | 5   | 推理调度（分布式篇）：缓存感知路由到全局准入控制       | Router / 准入控制 / 扩缩容                            | 打车平台派单中心     | 缓存感知路由 / 亲和 vs 均衡 / 早拒绝仿真 | ✅   |
-| 6   | 大模型的各种并行：从张量切分到上下文并行               | Model Executor / TP·SP·PP·DP·CP·EP / EPLB·DeepEP      | 大厨团队的分工       | —                                        | 🚧   |
+| 6   | 大模型的各种并行：从张量切分到上下文并行               | Model Executor / TP·SP·PP·DP·CP·EP / EPLB·DeepEP      | 切 [B,S,H] 积木      | —                                        | 🚧   |
 | 7   | 推理模型（long-CoT）服务                               | 调度 + KV 生命周期在长思维链下的新负载                | 考场里的大考         | 长 CoT 下 KV 占用与 straggler 仿真       | ⬜   |
 | 8   | GPU 架构与现有 GPU（含 Attention Kernel）              | 硬件 / Roofline / Attention Kernels（FlashInfer/FA3） | GPU = 一座工厂       | Roofline 与 kernel 访存/算力仿真         | ⬜   |
 | 9   | 推测解码（Speculative Decoding）                       | Speculative proposer（EAGLE / MTP / n-gram）          | 抢答 + 复核          | 接受率/加速比与高并发失效仿真            | ⬜   |

@@ -328,3 +328,15 @@ def exp_c():
 一句话带走：**推理调度就是在固定 GPU-时间和 KV-显存下，反复在"吞吐 / TTFT / TPOT / 公平 / 命中率"这几个互相拉扯的目标之间选点。**
 
 延伸阅读：单机之外，当一个实例扛不住时，就要把 **prefill 和 decode 拆到不同 GPU 池**（DistServe、Splitwise），并让一个**全局调度器**按"KV 缓存在哪、传输多贵、SLO 是否满足"来路由请求（Mooncake 的 KVCache-centric 架构 + early rejection）。这套**分布式调度**建立在 PD 分离这块地基上——所以接下来我会先单独写一篇 **PD 分离**，把它讲透之后，再单独开一篇讲**分布式（集群）调度**。
+
+## 参考
+
+1. Yu et al., [_Orca: A Distributed Serving System for Transformer-Based Generative Models_](https://www.usenix.org/conference/osdi22/presentation/yu)（continuous batching / selective batching），OSDI 2022.
+2. Kwon et al., [_Efficient Memory Management for Large Language Model Serving with PagedAttention_](https://arxiv.org/abs/2309.06180)（vLLM，抢占：recompute / swap），SOSP 2023.
+3. Agrawal et al., [_Taming Throughput-Latency Tradeoff in LLM Inference with Sarathi-Serve_](https://arxiv.org/abs/2403.02310)（chunked prefill / stall-free batching），OSDI 2024.
+4. Fu et al., [_Efficient LLM Scheduling by Learning to Rank_](https://arxiv.org/abs/2408.15792)（预测输出长度相对排名近似 SJF/SRTF），NeurIPS 2024.
+5. Sheng et al., [_Fairness in Serving Large Language Models_](https://arxiv.org/abs/2401.00588)（VTC，Virtual Token Counter），OSDI 2024.
+6. Zheng et al., [_SGLang: Efficient Execution of Structured Language Model Programs_](https://arxiv.org/abs/2312.07104)（RadixAttention / cache-aware scheduling），NeurIPS 2024.
+7. Zhong et al., [_DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving_](https://arxiv.org/abs/2401.09670)，OSDI 2024.
+8. Patel et al., [_Splitwise: Efficient Generative LLM Inference Using Phase Splitting_](https://arxiv.org/abs/2311.18677)，ISCA 2024.
+9. Qin et al., [_Mooncake: A KVCache-centric Disaggregated Architecture for LLM Serving_](https://arxiv.org/abs/2407.00079)，FAST 2025.

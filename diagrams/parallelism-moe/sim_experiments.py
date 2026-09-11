@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""无需 GPU 的并行策略 / MoE 仿真，三个实验，SEED=42 可复现。
+"""无需 GPU 的并行策略 / MoE 仿真，四个实验，SEED=42 可复现。
 
 A: TP 一层墙钟 = 计算/tp + ring all-reduce（NVLink vs IB）
 B: PP 气泡利用率 = m / (m + p - 1)，小 m / 大 p 时崩掉
 C: zipf 专家路由 vs EPLB 冗余副本 —— 负载不均与 makespan
+D: 长序列下 TP 激活同步 vs Ring CP / Ulysses 通信载荷
 
 图表用 diagram-design 调色板。输出 PNG 到
 public/assets/posts/llm-inference-parallelism-moe/。
@@ -267,7 +268,9 @@ def exp_c(n_experts=256, n_gpus=32, top_k=8, n_tokens=80000, n_redundant=32, zip
     colors = [SOFT, MUTED, ACCENT]
     ax2.bar(labels, imbs, color=colors, width=0.6)
     ax2.set_ylabel("GPU 负载不均（max / mean）")
+    ax2.set_title("冗余副本把 straggler 压下来", color=INK, fontsize=12)
     ax2.set_ylim(0, max(imbs) * 1.18)
+    ax2.grid(axis="x", visible=False)
     for lab, v in zip(labels, imbs):
         ax2.text(lab, v + 0.03, f"{v:.2f}×", ha="center", color=INK, fontsize=10)
     fig.suptitle("EPLB：把最烫的专家复制到闲卡上", color=INK, fontsize=12)
@@ -275,6 +278,44 @@ def exp_c(n_experts=256, n_gpus=32, top_k=8, n_tokens=80000, n_redundant=32, zip
     fig.savefig(os.path.join(OUT, "sim-eplb-imbalance.png"), dpi=150)
     plt.close(fig)
     return stats
+
+
+# ----------------------------------------------------------------------------
+# 实验 D：长序列下 TP 激活同步 vs CP 传 KV
+# ----------------------------------------------------------------------------
+def exp_d():
+    """一层注意力附近的通信载荷随序列长度怎么涨。
+
+    TP：两次 all-reduce 的激活 ≈ 2 · S · hidden · 2B
+    Ring CP：每卡环传 KV ≈ (1 − 1/C) · S · d_kv · 2(K+V) · 2B
+    Ulysses：两次 all-to-all ≈ 2 · S · hidden · 2B / C
+    """
+    hidden, d_kv, dtype, C = 8192, 1024, 2, 8
+    seqs = np.array([2048, 4096, 8192, 16384, 32768, 65536, 131072])
+
+    tp_mb = 2 * seqs * hidden * dtype / 1e6
+    ring_mb = (1 - 1 / C) * seqs * d_kv * 2 * dtype / 1e6
+    ulysses_mb = 2 * seqs * hidden * dtype / C / 1e6
+
+    print("[D] prefill comm payload per layer (MB), C=8, GQA d_kv=1024")
+    for s, a, b, c in zip(seqs, tp_mb, ring_mb, ulysses_mb):
+        print(f"    S={s:6d}  TP-allreduce={a:8.1f}  Ring-CP={b:7.1f}  Ulysses={c:7.1f}")
+
+    fig, ax = plt.subplots(figsize=(7.6, 4.4))
+    ax.plot(seqs, tp_mb, "-o", color=MUTED, lw=2.2, label="TP 激活 all-reduce")
+    ax.plot(seqs, ring_mb, "-o", color=ACCENT, lw=2.2, label="Ring CP 传 KV（GQA）")
+    ax.plot(seqs, ulysses_mb, "-o", color=INK, lw=2.2, label="Ulysses all-to-all")
+    ax.set_xscale("log", base=2)
+    ax.set_xticks(seqs)
+    ax.get_xaxis().set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _p: f"{int(v)//1024}k"))
+    ax.set_xlabel("序列长度 S")
+    ax.set_ylabel("一层通信载荷 (MB / GPU)")
+    ax.set_title("长上下文该切 CP，而不是把 TP 再加大", color=INK, fontsize=12)
+    ax.legend(frameon=False)
+    fig.tight_layout()
+    fig.savefig(os.path.join(OUT, "sim-cp-vs-tp-comm.png"), dpi=150)
+    plt.close(fig)
+    return seqs, tp_mb, ring_mb, ulysses_mb
 
 
 if __name__ == "__main__":
@@ -286,4 +327,6 @@ if __name__ == "__main__":
     exp_b()
     print()
     exp_c()
+    print()
+    exp_d()
     print(f"\ncharts -> {OUT}")

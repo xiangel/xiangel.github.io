@@ -1,55 +1,67 @@
 ---
 author: xiangel
 pubDatetime: 2026-09-11T02:30:00Z
-title: "大模型推理的并行策略与 MoE：从张量切分到专家并行"
+title: "大模型的各种并行：从张量切分到上下文并行"
 slug: llm-inference-parallelism-moe
 featured: true
 draft: false
 tags:
   - 大模型推理系统
   - 并行策略
+  - 上下文并行
   - MoE
   - LLM
-description: 一张卡装不下，就得把模型切开。可切哪一维，决定了通信长什么样。用大厨团队的分工做类比，沿着 TP → PP → DP → EP 这条问题链，讲清 Megatron 的列/行切分、流水线气泡、DP Attention、专家并行，以及 DeepEP / EPLB / Dual-batch overlap 怎样把跨节点 all-to-all 藏进计算空隙。附一组无需 GPU、可复现的仿真。
+description: 一张卡装不下，就得把模型切开——但并行远不止 TP。用大厨团队的分工做类比，把 TP、PP、DP、SP、CP、EP 六刀摊开，分清 Megatron SP 和 Ring / Ulysses / DCP 不是一回事，再讲 MoE 的专家并行、DeepEP / EPLB，以及训练里多出来的 ZeRO。附一组无需 GPU、可复现的仿真。
 ---
 
-如果你把一个 70B、乃至 DeepSeek-V3 那种 671B 的模型搬上线，很少能靠"再买一张更大的卡"收场。更常见的是，问题会按这个顺序一层层冒出来：
+并行这两个字，在大模型圈子里被用滥了。有人说的 TP，有人说的 SP，还有人把 DeepSpeed 的 Ulysses 也叫序列并行。名字听着像一家，切的维、通信形态、适用场景完全不是一回事。这篇就把桌上能见到的刀一次摊开。
 
-1. **一张卡装不下权重。** 同一层的矩阵太大，只能横着切开，几张卡同时算这一层的不同切片。
-2. **切开之后，节点里面还快，一出节点就不划算。** 层内同步走 NVLink 还能被计算盖住；换成 InfiniBand，通信自己就变成瓶颈。
-3. **一份切开的模型，一次还是只能吞一小批请求。** 要吞吐，就得再复制几份，各接各的单。
-4. **模型变成 MoE 之后，张量并行会切错地方。** 单个 expert 已经很小，再用 TP 切开，通信占比高到不划算——得改切专家。
+如果你把一个 70B、乃至 DeepSeek-V3 那种 671B 的模型搬上线，很少能靠"再买一张更大的卡"收场。问题会按这个顺序一层层冒出来：
 
-这四件事对应四种并行：**张量并行 TP（Tensor Parallel）**、**流水线并行 PP（Pipeline Parallel）**、**数据并行 DP（Data Parallel）**、**专家并行 EP（Expert Parallel）**。名字都带"并行"，切的却不是同一刀，通信形态也完全不同。选错一刀，不是人手不够，是传菜把时间吃掉了。
+1. **一张卡装不下权重** → 沿 hidden 切开，这是 **TP**。
+2. **TP 切完，激活显存还在** → 把 LayerNorm 按序列切开，这是 **SP**。
+3. **出了节点再做大 TP 不划算，层又太多** → 沿深度切开，这是 **PP**。
+4. **一份模型吞吐不够** → 复制几份接单，这是 **DP**。
+5. **序列太长，注意力的 KV 比权重大** → 沿 token 切开注意力，这是 **CP**（推理里还要再分成 DCP / PCP）。
+6. **模型变成 MoE，单个 expert 已经很小** → 再切 TP 不划算，改切专家，这是 **EP**。
 
-这是本系列第六篇。[第一篇](/posts/from-causal-lm-to-inference-system/)把"权重怎么切到多卡"列为后续模块，当时只点了题。[第四篇](/posts/llm-inference-pd-disaggregation/)已经说了 prefill 想要**小 TP**、decode 想要**大 TP**，但还没解释 TP 本身在切什么。[第五篇](/posts/llm-inference-scheduling-distributed/)把请求派到了集群上的某一台机器。这一篇钻进那台机器、以及它所属的并行组里面，问的是：**Model Executor 到底按哪一维把模型切开？切开之后，每一步要付多少通信账？**
+这是本系列第六篇。[第一篇](/posts/from-causal-lm-to-inference-system/)把"权重怎么切到多卡"点过题；[第四篇](/posts/llm-inference-pd-disaggregation/)说了 prefill 想要小 TP、decode 想要大 TP，但没解释这些缩写在切什么；[第五篇](/posts/llm-inference-scheduling-distributed/)把请求派到了某台机器。这一篇钻进那台机器所属的并行组，问：**Model Executor 按哪一维切？每种切法付什么通信账？哪些刀其实不是一回事？**
 
-> **说明**：本篇讲的是**一层 forward 内部**怎么切分，不是第五篇那种跨实例的请求路由。按序列切注意力计算本身（Context Parallel）放到后续 GPU / 长上下文篇。训练里的 DualPipe（把前向和反向叠在一起）只在后面脚注里对照一下，正文只谈推理的 Dual-batch overlap。
+> **说明**：本篇讲的是**模型怎么切开**，不是第五篇那种跨实例的请求路由。训练里的 DualPipe、ZeRO 会点明"这是训练刀，推理不用"，避免和推理的 Dual-batch overlap、DP 混在一起。
 
-全程用一个类比贯穿：**大厨团队的分工**。一张卡是一个灶台，一层计算是一道菜。TP 是几个人围着同一口锅各炒一角，每下一刀都要对齐；PP 是备菜、热锅、装盘排成流水线；DP 是再开几间分店，各做各的单；EP 是每个师傅只做自己那几道拿手菜，跑堂按菜单把半成品送到对应的灶。还是系列那条主线：**每暴露一个问题，就引入一种优化，又带出新问题。**
+全程用一个类比贯穿：**大厨团队的分工**。一张卡是一个灶台，一层计算是一道菜。TP 是几个人围着同一口锅各炒一角；SP 是案板上的配菜按份分开，少占地方；PP 是备菜、热锅、装盘排成流水；DP 是再开几间分店；CP 是一篇超长菜单撕成几段，各灶先处理自己那段，再把配料转一圈；EP 是每个师傅只做拿手菜，跑堂按菜单送半成品。还是那条主线：**每暴露一个问题，就引入一种优化，又带出新问题。**
 
 ## Table of contents
 
-## 一、并行在切哪一维
+## 一、先把所有刀摊在桌上
 
-先把四刀的"形状"摆清楚。同一份 Transformer，可以沿四个轴切开——切 hidden、切层、切请求、切专家。它们不是互斥选项，后面会看到，生产系统几乎总是叠着用。
+推理里真正会叠在一起的，是下面这六刀。训练里还有几把，名字容易混进来，表后再单列。
 
-![同一份模型的四种切开方式：TP 切 hidden，PP 切 layers，DP 切 batch，EP 切 experts](/assets/posts/llm-inference-parallelism-moe/diagram-four-axes.png)
+![六刀全景：TP / PP / DP / SP / CP / EP 各切哪一维；ZeRO、VPP、Ulysses 同名不是同一刀](/assets/posts/llm-inference-parallelism-moe/diagram-taxonomy.png)
 
-| 并行   | 切开的维                   | 典型通信                          | 推理里最怕什么                 |
-| ------ | -------------------------- | --------------------------------- | ------------------------------ |
-| **TP** | 一层里的 hidden / 权重矩阵 | 层内 **all-reduce**               | 跨节点；小消息的延迟           |
-| **PP** | 层与层之间                 | 阶段边界 **点对点**               | 气泡；batch=1 灌不满           |
-| **DP** | 请求 / batch               | 推理里通常**不**梯度同步          | 副本间的 KV 与前缀缓存被摊薄   |
-| **EP** | MoE 的 experts             | **dispatch / combine all-to-all** | 热点专家；两种通信内核不能共存 |
+| 并行   | 切开的维                   | 典型通信                          | 主要出现在  | 最怕什么                       |
+| ------ | -------------------------- | --------------------------------- | ----------- | ------------------------------ |
+| **TP** | hidden / 权重（含词表）    | 层内 **all-reduce**               | 训练 + 推理 | 跨节点；小消息延迟             |
+| **SP** | LayerNorm / Dropout 的序列 | all-gather / reduce-scatter       | 训练 + 推理 | 被叫成"序列并行"的其实是 CP    |
+| **PP** | layers                     | 阶段边界 **点对点**               | 训练为主    | 气泡；batch=1 灌不满           |
+| **DP** | batch / 请求               | 推理里通常**没有**                | 训练 + 推理 | 前缀缓存被摊薄                 |
+| **CP** | 序列，**含注意力本身**     | Ring 传 KV，或 Ulysses all-to-all | 长上下文    | 和 SP 同名；DCP / PCP 还要再分 |
+| **EP** | MoE experts                | dispatch / combine **all-to-all** | MoE         | 热点专家；两种通信内核不能共存 |
 
-读这张表时，不妨盯着"典型通信"那一列。TP 的 all-reduce 是"每个人手里都有一份同样大小的数据，加总之后每人再拿回完整结果"；PP 的点对点只在相邻阶段之间递一次激活；DP 在推理里常常根本不通信；EP 的 all-to-all 则是"每个人都可能给其他所有人发一份，份量还取决于路由"。**通信的形状，比"用了几张卡"更能决定这刀能不能赚钱。**
+读这张表时，盯"切开的维"比盯缩写有用。TP 切的是矩阵的宽，PP 切的是网络的深，DP 切的是请求的份数，SP 切的是**不算注意力的那截激活**，CP 切的才是**注意力看见的那段序列**，EP 切的是专家。**通信的形状，比"用了几张卡"更能决定这刀能不能赚钱。**
 
-四刀也可以叠在同一层里。DeepSeek-V3 线上就是这样：attention 走 TP + SP + DP，MoE 走 EP。不是在四种并行里单选一个，而是给每一段计算挑最合适的那一刀——稠密、要同步的部分用 TP，稀疏、按专家走的部分用 EP，请求维度再用 DP 摊开。
+还有几把不要塞进同一张菜单：
 
-> **类比**：这就是后厨的工位图。有人围着同一口锅分工（TP），有人按工序排成流水（PP），有人再开一间分店接溢出的单（DP），还有人按菜品专精（EP）。工位切错了，不是人手不够，是**传菜的走位**把时间吃掉了。
+- **ZeRO / FSDP**：把优化器状态、梯度、有时连参数都按 DP 维切开。推理没有优化器，这把刀不上桌。
+- **虚拟流水线 VPP**：同一张卡上交错多个 PP 阶段，用来减气泡，几乎是训练技巧。
+- **DualPipe**：训练里把前向和反向叠在一条流水线上。推理的 Dual-batch overlap 是另一件事。
+- **MegaScale-Infer** 那种 attention / FFN 拆到两类机器：不是第七种切维，是 EP 之后再做一次**模块分离**，第九节末尾会点到。
 
-## 二、第一刀：一张卡装不下 —— 张量并行 TP
+六刀也可以叠。DeepSeek-V3 线上就是：**attention 走 TP + SP + DP，MoE 走 EP**。长上下文再叠 CP。不是单选，是给每一段计算挑刀。
+
+> **类比**：后厨工位图。围着一口锅分工（TP），案板配菜分开摆（SP），按工序排流水（PP），再开分店（DP），超长菜单撕成几段互相转配料（CP），按拿手菜专精（EP）。工位切错了，不是人手不够，是**传菜的走位**把时间吃掉了。
+
+## 二、一张卡装不下：张量并行 TP
 
 最朴素的需求：权重比一张卡的显存大。一张 H100 是 80 GB，70B 的 bf16 权重就要 140 GB，还没算 KV Cache。所以 Megatron-LM 的做法是：不要把整层交给一张卡，把每一层的线性层沿 **hidden** 切开，让几张卡**同时算同一层的不同切片**。
 
@@ -66,13 +78,29 @@ Ring all-reduce 的数据量正比于 **(t−1)/t**。这个式子有个不太�
 
 所以 TP 有一条硬约束：**尽量停在 NVLink 域里**。常见的是单机 8 卡，或者 NVLink 连起来的超节点。H100 节点内 NVLink 是数百 GB/s 这个量级；一出节点，InfiniBand 掉到数十 GB/s，延迟也高一个数量级。实验 A 会把这条线画出来：同样算一层，NVLink 上加大 TP 还在加速，IB 上通信很快反超计算。这也解释了 DeepSeek-V3 为什么把 attention 的 TP **钉死在 4**——论文原话就是用小 TP 限制通信开销。再大，切出来的计算更碎，同步却更密。
 
+词表和 LM Head 通常也跟着 TP 切，叫 **vocab parallel**：embedding 按词表维切开，最后的 softmax 只在各卡的那一段词表上做，再做一个并行的采样。它不是独立的第七刀，是 TP 在模型两头的延伸。
+
 > **类比**：几个人围着同一口锅炒同一道菜，每下一刀都要互相报一声"我这边好了"（all-reduce）。灶台挨着（NVLink），报一声很快；灶台隔了两条街（IB），报一声的时间比炒菜还长。
 
-**序列并行 SP（Sequence Parallel）** 是 TP 的伴生，不是另一种切模型的方式。LayerNorm、Dropout 这些算子几乎不吃权重，却把激活张量整份摊在显存里。TP 只切了线性层的权重，激活还是整段序列都在。SP 的做法是：把这些算子按**序列维**切开，每张卡只留自己那一段 token 的激活，用 all-gather / reduce-scatter 替换掉一部分 all-reduce。换来的是激活显存再薄一档。DeepSeek-V3 的 attention 写成 **TP4 + SP**，指的就是这套组合。
+## 三、TP 切完激活还在 —— 序列并行 SP
 
-按序列去切**注意力计算本身**（Context Parallel）是另一件事：那是在超长上下文里，把 QK 的计算摊到多卡上。本篇不展开，留给硬件与长上下文那一篇。
+TP 只切了线性层的权重。LayerNorm、Dropout 这些算子几乎不吃权重，却把**整段序列的激活**摊在显存里。训练时这一点尤其疼：激活要留给反向，SP 就是为这件事发明的。
 
-## 三、第二刀：出节点太贵 —— 流水线并行 PP
+**Megatron 的序列并行 SP（Sequence Parallel）** 做法是：把这些算子按序列维切开，每张卡只留自己那一段 token 的激活，用 all-gather / reduce-scatter 替换掉一部分 all-reduce。换来的是激活显存再薄一档。它**要求已经开了 TP**，而且**不切注意力计算本身**——Q 还是要和整段 KV 见面。DeepSeek-V3 的 attention 写成 **TP4 + SP**，指的就是这套组合。
+
+这里必须把三个常被混用的名字拆开：
+
+| 名字                             | 切什么                          | 注意力怎么算                            |
+| -------------------------------- | ------------------------------- | --------------------------------------- |
+| **Megatron SP**                  | 只切 LayerNorm / Dropout 的激活 | 注意力仍在 TP 组里，不按序列摊 KV       |
+| **Ring CP**                      | 切完整序列，含 QKV              | 环形把别人的 KV 传过来                  |
+| **Ulysses（DeepSpeed 也叫 SP）** | 切完整序列                      | 两次 all-to-all，改成按头切开再算注意力 |
+
+后两个才是第六节的 **CP**。如果有人说"我们开了序列并行"，先问一句：切的是 LayerNorm，还是注意力。
+
+> **类比**：TP 是几个人围着一口锅；SP 只是把案板上的配菜按份分开摆，锅还是那一口。真正把长菜单撕开、各炒一段的，是 CP。
+
+## 四、出节点太贵：流水线并行 PP
 
 TP 出了节点就不划算。可模型还是太大：8 张卡的 NVLink 域依然装不下整份权重。下一刀改切 **layers**——把连续若干层交给一个**阶段（stage）**，激活算完这一段，再递给下一个阶段。这就是 **流水线并行 PP**。
 
@@ -86,11 +114,15 @@ Narayanan 等人给出的理想利用率是 `m / (m + p − 1)`。`p` 是阶段�
 
 所以生产推理里，PP 更多是"实在跨不出 NVLink 时的备选"，而不是 decode 的主方案。DeepSeek-V3 的推理单元**不用 PP**，把跨节点的预算留给了后面要讲的 EP all-to-all——那种通信虽然更散，但至少每张卡都有专家在算，不会整段空转。
 
-## 四、还要吞吐：数据并行 DP，以及 MoE 入口的 DP Attention
+训练里还有两件专门减气泡的事，推理几乎用不上。**1F1B** 把后面微批次的前向，和前面微批次的反向叠在一起；**虚拟流水线 VPP** 让同一张卡交错持有多个非连续阶段，把气泡摊得更碎。它们吃的是训练的大 batch 加反向。在线 decode 没有反向，也没有那么多微批次，这两招帮不上忙。
+
+## 五、还要吞吐：数据并行 DP，以及 MoE 入口的 DP Attention
 
 TP 和 PP 解决的是"**一份模型怎么切开**"。切完之后，这一份模型一次仍然只能吞一个、或一小批请求。流量再大，单份并行组也会先被请求队列堵住。下一刀是 **复制**：同样的（或已经按 TP 切开的）模型多放几份，各接各的单。这就是 **数据并行 DP**。
 
 训练里的 DP 每一步都要 **all-reduce 梯度**，副本之间同步很重。**推理里没有梯度**，副本之间默认不说话，所以它看起来最便宜。便宜的代价在别处：每份副本各自缓存各自的 KV。你加的副本越多，同一个前缀就越容易被摊到不同机器上，[第二篇](/posts/kv-cache-paged-attention-and-prefix-caching/)的前缀缓存、[第五篇](/posts/llm-inference-scheduling-distributed/)的缓存感知路由都会被稀释。DP 在 serving 里的正确用法，常常不是再复制一份完整的 70B，而是和别的并行叠在一起，只复制那些**必须按请求切开**的部分。
+
+不要把训练里的 **ZeRO / FSDP** 算进推理的 DP。ZeRO-1 切的是优化器状态，ZeRO-2 再切梯度，ZeRO-3 / FSDP 连参数也按 DP 维切开。推理没有优化器，也没有梯度；参数如果还要切，走的是 TP、PP 或 EP。有人说"我们开了 ZeRO-3"，那是训练刀。
 
 MoE 把这件事逼出了一个专门变体：**DP Attention**。
 
@@ -105,7 +137,31 @@ DeepSeek-V3 的 prefill 写成 **TP4 + SP + DP8**，decode 写成 **TP4 + SP + D
 
 > **类比**：分店可以各做各的家常菜（纯 DP）。后厨一旦改成"凉菜归凉菜组、热菜归热菜组"（EP），前厅点单却还是按桌走——每一桌的菜单（KV）必须留在自己那一桌的服务员手里。两套工位叠在同一班次里：专精的是菜，按桌分开的是点单。
 
-## 五、稀疏起来：专家并行 EP
+## 六、序列太长：上下文并行 CP
+
+前几刀切的是权重、层、请求。序列一旦拉到 32k、128k，新问题换了对象：**KV Cache 比权重大**。一张卡也许还装得下 70B 的切片，却装不下这条请求已经生成的 KV。TP 帮不上这个忙——GQA / MLA 的 KV 头本来就少，TP 加大以后，每张卡反而要把同一份 KV 再复制一遍。第三节的 SP 也帮不上：它只切 LayerNorm，不切注意力。
+
+这一刀叫 **上下文并行 CP（Context Parallel）**。把序列按 token 切开，每张卡只负责一段；注意力要用到别人那段 KV 时，再把 KV 转过去。切的是**注意力看见的那段序列**，所以和 Megatron SP 不是一回事。DeepSpeed 把 Ulysses 也叫 Sequence Parallelism，名字撞了，维没撞。
+
+![Ring 环形传 KV；Ulysses 两次 all-to-all 换成按头计算；DCP 不增加 GPU，只在 TP 组里交错切 KV](/assets/posts/llm-inference-parallelism-moe/diagram-context-parallel.png)
+
+通信有两条主流路。
+
+**Ring CP / Ring Attention。** Megatron 默认走这条。每张卡先拿自己那段 QKV，先和本地 KV 做注意力；再把 KV 沿环传给邻居，和下一块再做一次；转满一圈，就等价于看见了完整序列。一层的通信体积大约是 `(1 − 1/C) · S · d_kv · 2`（K 和 V），bf16 再乘 2 字节。GQA / MLA 让 `d_kv` 远小于 `hidden`，环传比把整段激活 all-reduce 便宜一个数量级。计算和通信还能重叠：本块注意力在算时，下一块 KV 已经在路上。
+
+**Ulysses（DeepSpeed；Megatron 里也叫 a2a）。** 两次 all-to-all 换轴：先按序列切开拿到 QKV，再换成按注意力头切开——每张卡拿到**完整序列、但只有一部分头**，注意力在本地做完，再 all-to-all 换回去。体积大约是 `2 · S · hidden / C`。一次集体通信，NVLink 上往往比一圈 P2P 更快；约束是头数得 ≥ CP 度。跨节点则常退回 Ring。
+
+实验 D 会把这两种载荷和 TP 的激活同步画在同一张图上：序列一长，该切 CP，而不是把 TP 再加大。
+
+推理还要再拆一刀，因为 prefill 和 decode 的 KV 形状完全不同。
+
+**Decode Context Parallel（DCP）。** 不增加 GPU 数。它复用现有 TP 组，按 token 交错把 KV 切开：`token i` 住在 `i % dcp` 那张卡上。GQA 头不够切时，TP 会把 KV 复制 `tp / H` 份；DCP 就是来砍掉这段复制的。vLLM 的开关是 `--decode-context-parallel-size`（也写 `-dcp`），上界大约是 `tp_size / num_kv_heads`。开得越大，KV 越省，通信越重。
+
+**Prefill Context Parallel（PCP）。** 才真正加卡。一条超长 prompt 按序列切开，用来压 TTFT。world size 变成 `TP × PCP`。vLLM 对应 `--prefill-context-parallel-size`。它和 DCP 正交，不要共用一个开关：一个改的是"decode 时 KV 怎么摊在已有卡上"，一个改的是"prefill 要不要多叫几张卡来切序列"。
+
+> **类比**：一篇超长菜单撕成几段。Ring 是邻桌把配料转一圈，你才能把整道菜的味道对齐；Ulysses 是先按段拆单，再改成按菜系拆——每个人拿到完整菜单，但只负责一类菜。DCP 不新开灶，只是把已经坐满的那一桌，按单号单双号把菜单分开夹；PCP 才是再叫几个人来一起备这道超长前菜。
+
+## 七、稀疏起来：专家并行 EP
 
 Dense 模型的 FFN 是一整块大矩阵，用 TP 切开是划算的：切片仍然够大，all-reduce 摊得下去。MoE 把这块换成**很多个小专家**，每个 token 只激活其中 top-k 个。以 DeepSeekMoE 为例：
 
@@ -126,7 +182,7 @@ Dense 模型的 FFN 是一整块大矩阵，用 TP 切开是划算的：切片�
 
 > **类比**：不再围着一口锅炒，改成每个师傅只做自己那几道拿手菜。跑堂（dispatch）按菜单把半成品送到对应的灶，做好再收齐（combine）。菜单若总点同一道爆款，那位师傅会被点爆，别的灶却在空转。
 
-## 六、all-to-all 贵 + 热点专家 —— DeepEP、EPLB 与 Dual-batch overlap
+## 八、all-to-all 贵 + 热点专家 —— DeepEP、EPLB 与 Dual-batch overlap
 
 EP 把两个新问题同时放到台面上。它们不是先后发生的，而是同一套 all-to-all 上的两面：一面是**谁更忙**，一面是**通信本身怎么走**。
 
@@ -153,7 +209,7 @@ EP 把两个新问题同时放到台面上。它们不是先后发生的，而�
 
 > **类比**：爆款菜复制一份到空闲灶（EPLB）；午餐和夜宵用两套完全不同的传菜节奏，不能共用一条对讲频道（DeepEP 两种内核，所以必须 PD 分离）；两个跑堂交错着送——一个在传、一个在炒（TBO）。
 
-## 七、生产里怎么配：DeepSeek-V3 与开源框架
+## 九、生产里怎么配：DeepSeek-V3 与开源框架
 
 把前面的刀叠回去，就是 DeepSeek-V3 论文 §3.4 里的推理单元。最值得盯住的不是某一行的数字，而是：**prefill 和 decode 的并行度故意不一样。** 这正是第四篇说的"阶段专属优化"，落到 MoE 上的具体配法。
 
@@ -174,13 +230,15 @@ EP 把两个新问题同时放到台面上。它们不是先后发生的，而�
 开源侧能复现到什么程度？LMSYS / SGLang 在 **96×H100**（12 节点）上做了一个缩小版：prefill 仍是 **EP32**，decode 用 **EP72**（大约是论文 decode 规模的一半）。相对同一资源上的 vanilla TP16，输出吞吐最高大约 **5×**；2k 输入时，单节点大约 52.3k input tok/s、22.3k output tok/s。框架上对应的开关，可以按"开了它在解决哪一节的问题"来记：
 
 - **SGLang**：`--enable-deepep-moe` 换上 DeepEP 的 all-to-all；`--deepep-mode {normal,low_latency}` 给两个池各绑一种内核；`--enable-eplb` 做冗余和重排；`--enable-two-batch-overlap` 打开 TBO；`--enable-dp-attention` 让 attention 按 DP 走。PD 分离本身用 `--disaggregation-mode {prefill,decode}`。
-- **vLLM**：`--enable-expert-parallel` 把 MoE 从"用 TP 切专家"改成"按专家切开"，EP 规模等于 `TP × DP`（只开 PP、TP=1 且 DP=1 时，这个开关不会生效）；`--all2all-backend` 选 `deepep_high_throughput` 或 `deepep_low_latency`；`--enable-eplb` 和 `--enable-dbo` 分别对应 EPLB 与 Dual-batch overlap。
+- **vLLM**：`--enable-expert-parallel` 把 MoE 从"用 TP 切专家"改成"按专家切开"，EP 规模等于 `TP × DP`（只开 PP、TP=1 且 DP=1 时，这个开关不会生效）；`--all2all-backend` 选 `deepep_high_throughput` 或 `deepep_low_latency`；`--enable-eplb` 和 `--enable-dbo` 分别对应 EPLB 与 Dual-batch overlap。长上下文再叠 CP：`--decode-context-parallel-size`（也写 `-dcp`）在现有 TP 组里交错切 KV，**不增加 GPU**；`--prefill-context-parallel-size` 才按序列加卡，world size 变成 `TP × PCP`。
 
 有一件事两边都成立：没有 PD 分离就强行让同一通信组跑两种 DeepEP 内核，组会卡住。这不是哪个开关没打开，是通信组的语义不允许。
 
-## 八、三组无需 GPU 的实验
+EP 把 FFN 按专家切开之后，还可以再走一步：**把 attention 和 MoE FFN 拆到两类机器上**。ByteDance 的 MegaScale-Infer 做的就是这件事——attention 机器盯 KV 和延迟，专家机器盯吞吐。它不是第七种切维，是模块分离：和[第四篇](/posts/llm-inference-pd-disaggregation/)的 PD 分离同一思路，只是切的对象从"两个阶段"换成"两种算子"。本篇不展开它的调度，只把它从六刀里拿出去，免得和 EP 叠在一起分不清。
 
-下面三组实验都在 CPU 上跑，`SEED=42` 可复现。它们**不是**端到端 GPU benchmark，也不会复现 LMSYS 那组 5×。实验 A 是一层 decoder 的解析墙钟：计算按 `1/TP` 缩放，通信按 ring all-reduce 估价。实验 B 直接代入流水线气泡公式。实验 C 是 zipf 路由下的 GPU 负载，不管字节数，只看谁最忙。目的是把正文里的数量级钉死，方便对照，不代替真机上的 kernel 剖面。脚本在 `diagrams/parallelism-moe/sim_experiments.py`。
+## 十、四组无需 GPU 的实验
+
+下面四组实验都在 CPU 上跑，`SEED=42` 可复现。它们**不是**端到端 GPU benchmark，也不会复现 LMSYS 那组 5×。实验 A 是一层 decoder 的解析墙钟：计算按 `1/TP` 缩放，通信按 ring all-reduce 估价。实验 B 直接代入流水线气泡公式。实验 C 是 zipf 路由下的 GPU 负载，不管字节数，只看谁最忙。实验 D 只算一层注意力附近的通信载荷：TP 激活同步 vs Ring CP / Ulysses。目的是把正文里的数量级钉死，方便对照，不代替真机上的 kernel 剖面。脚本在 `diagrams/parallelism-moe/sim_experiments.py`。
 
 ### 实验 A：TP 计算 vs all-reduce —— NVLink 还在加速，IB 上通信反超
 
@@ -259,32 +317,63 @@ imbalance = load.max() / load.mean()
 | 按热度装箱                   | 3.73×      |
 | 装箱 + 32 冗余               | **2.11×**  |
 
-只改放置、不加副本，不均已经从将近 14 倍掉到 3.7 倍——说明"热专家碰巧住在一起"本身就很伤。再复制 32 个最烫的专家，straggler 降到 2.1 倍。这和 LMSYS 说的"EPLB 在大规模下把吞吐拉起来"是同一件事的负载侧：墙钟不看平均值，看最忙的那张卡。仿真没有建模 all-to-all 的字节数，也没有 kernel 启动，所以**不能**把 13.96 → 2.11 直接读成 1.49× / 2.54× 那些端到端数字。那些来自真机，见第七节。这里只说明：冗余副本解决的是"谁更忙"，不是"通信有多贵"。
+只改放置、不加副本，不均已经从将近 14 倍掉到 3.7 倍——说明"热专家碰巧住在一起"本身就很伤。再复制 32 个最烫的专家，straggler 降到 2.1 倍。这和 LMSYS 说的"EPLB 在大规模下把吞吐拉起来"是同一件事的负载侧：墙钟不看平均值，看最忙的那张卡。仿真没有建模 all-to-all 的字节数，也没有 kernel 启动，所以**不能**把 13.96 → 2.11 直接读成 1.49× / 2.54× 那些端到端数字。那些来自真机，见第九节。这里只说明：冗余副本解决的是"谁更忙"，不是"通信有多贵"。
 
-## 九、总结与延伸
+### 实验 D：长序列该切 CP，而不是把 TP 再加大
+
+hidden=8192，GQA 的 `d_kv=1024`，CP 度 `C=8`，bf16。只比较一层注意力附近的通信载荷，不算计算、也不算 hop 延迟。
+
+```python
+tp_mb = 2 * S * hidden * 2 / 1e6                 # 两次激活 all-reduce
+ring_mb = (1 - 1 / C) * S * d_kv * 2 * 2 / 1e6   # 环传 K+V
+ulysses_mb = 2 * S * hidden * 2 / C / 1e6        # 两次 all-to-all 换轴
+```
+
+![序列从 2k 拉到 128k，TP 激活同步涨到 4.3 GB；Ring CP（GQA）和 Ulysses 仍在数百 MB](/assets/posts/llm-inference-parallelism-moe/sim-cp-vs-tp-comm.png)
+
+一手结果（一层通信载荷，MB / GPU）：
+
+| S      | TP all-reduce | Ring CP | Ulysses |
+| ------ | ------------- | ------- | ------- |
+| 2048   | 67.1          | 7.3     | 8.4     |
+| 8192   | 268.4         | 29.4    | 33.6    |
+| 32768  | 1073.7        | 117.4   | 134.2   |
+| 131072 | **4295.0**    | 469.8   | 536.9   |
+
+S=2048 时，Ring 已经只有 TP 激活同步的约 **1/9**；到 128k，TP 一侧涨到 **4.3 GB**，Ring / Ulysses 还在 470–540 MB。这就是第六节那句话的数量级：长上下文该切序列，不该把 TP 再加大——GQA 把 KV 头压得很窄，环传吃的是 `d_kv`，TP 同步吃的是整个 `hidden`。仿真没有建模 ring 的 hop 延迟，也没有 all-to-all 的集体启动，所以不能直接读成墙钟。它只说明：**切错维，字节数会差一个数量级。**
+
+## 十一、总结与延伸
 
 并行策略的主线，还是那条"发现问题 → 引入优化 → 带出新问题"的链子：
 
-- **一张卡装不下** → **TP（Megatron 列/行切分）**。层内 all-reduce，体积 `(t−1)/t`，最好停在 NVLink 域。
-- **出节点太贵** → **PP**。改切层，气泡是 `(p−1)/(m+p−1)`；batch=1 时几乎串行。
-- **还要吞吐** → **DP / DP Attention**。推理不梯度同步；MoE 下 attention 按请求复制，专家按 EP 切。
+- **一张卡装不下** → **TP（Megatron 列/行切分，含 vocab parallel）**。层内 all-reduce，体积 `(t−1)/t`，最好停在 NVLink 域。
+- **TP 切完激活还在** → **SP**。只切 LayerNorm / Dropout，不切注意力；别和 Ulysses 同名混淆。
+- **出节点太贵** → **PP**。改切层，气泡是 `(p−1)/(m+p−1)`；batch=1 时几乎串行。1F1B / VPP 是训练刀。
+- **还要吞吐** → **DP / DP Attention**。推理不梯度同步；ZeRO / FSDP 不上推理桌。MoE 下 attention 按请求复制，专家按 EP 切。
+- **序列太长，KV 比权重大** → **CP**。Ring 传 KV，或 Ulysses 换轴；推理再拆 DCP（不加人）和 PCP（加卡切 prefill）。
 - **稀疏 FFN 不值得再用 TP 切** → **EP**。dispatch / combine 两次 all-to-all。
 - **all-to-all 贵，路由还不均匀** → **DeepEP 两种内核 + EPLB 冗余副本**。
 - **通信还是和计算同量级** → **Dual-batch overlap**；两种内核不能住在同一通信组里 → **咬合第四篇的 PD 分离**。
 
-一句话带走：**并行策略就是给每一段计算选一刀——TP 切 hidden，PP 切层，DP 切请求，EP 切专家。MoE 把最后一刀推到跨节点之后，真正决定墙钟的不再是平均 FLOPs，而是 all-to-all 走哪条线、以及最烫的那个专家住在哪。**
+一句话带走：**并行就是给每一段计算选一刀——TP 切 hidden，SP 切激活，PP 切层，DP 切请求，CP 切序列，EP 切专家。同名不是同一刀：Megatron SP 不切注意力，Ulysses 才切；DCP 不加卡，PCP 才加。MoE 把 EP 推到跨节点之后，真正决定墙钟的不再是平均 FLOPs，而是通信走哪条线、以及最烫的那个专家住在哪。**
 
-延伸阅读：下一篇会把负载换成 **long-CoT / 推理模型**。思维链把 decode 拉得很长，KV 占得更久，straggler 和调度的形状都会变。再往后是 GPU 架构与 attention kernel；本篇刻意没展开的 Context Parallel，会放在那里一起讲。若还想往 MoE 上再砍一刀——把 attention 和 FFN 拆到两类机器上——见 MegaScale-Infer（ByteDance）：它是 EP 之后的另一次分离，本篇只点到为止。
+延伸阅读：下一篇会把负载换成 **long-CoT / 推理模型**。思维链把 decode 拉得很长，KV 占得更久，straggler 和调度的形状都会变——第六节的 CP 就是给那种负载预备的刀，本篇已经摊开。再往后是 GPU 架构与 attention kernel。若还想往 MoE 上再砍一刀——把 attention 和 FFN 拆到两类机器上——见 MegaScale-Infer（ByteDance）：它是 EP 之后的另一次模块分离，第九节只点到为止。
 
 ## 参考
 
 1. Shoeybi et al., [_Megatron-LM: Training Multi-Billion Parameter Language Models Using Model Parallelism_](https://arxiv.org/abs/1909.08053), 2019.
 2. Narayanan et al., [_Efficient Large-Scale Language Model Training on GPU Clusters Using Megatron-LM_](https://arxiv.org/abs/2104.04473), SC 2021.
-3. Liu et al., [_DeepSeek-V3 Technical Report_](https://arxiv.org/abs/2412.19437), 2024.（§3.4 推理部署：prefill EP32 / decode EP320）
-4. Zhao et al., [_Insights into DeepSeek-V3: Scaling Challenges and Reflections on Hardware for AI Architectures_](https://arxiv.org/abs/2505.09343), 2025.
-5. DeepSeek, [_DeepEP: an efficient expert-parallel communication library_](https://github.com/deepseek-ai/DeepEP), 2025.
-6. LMSYS, [_Deploying DeepSeek with PD Disaggregation and Large-Scale Expert Parallelism on 96 H100 GPUs_](https://lmsys.org/blog/2025-05-05-large-scale-ep/), 2025.
-7. vLLM, [_Expert Parallel Deployment_](https://docs.vllm.ai/en/stable/serving/expert_parallel_deployment/)（`--enable-expert-parallel`，EP = TP×DP）.
-8. SGLang, [_Expert Parallelism_](https://docs.sglang.io/docs/advanced_features/expert_parallelism.html)（DeepEP / EPLB / TBO）.
-9. Chen et al., [_MegaScale-Infer: Serving Mixture-of-Experts at Scale with Disaggregated Expert Parallelism_](https://arxiv.org/abs/2504.02263), 2025.
-10. DeepSeek, [_One More Thing: DeepSeek-V3/R1 Inference System Overview_](https://github.com/deepseek-ai/open-infra-index/blob/main/202502OpenSourceWeek/day_6_one_more_thing_deepseekV3R1_inference_system_overview.md)（开源周：decode 单元的 EP144 写法与论文 EP320 不同）.
+3. Korthikanti et al., [_Reducing Activation Recomputation in Large Transformer Models_](https://arxiv.org/abs/2205.05198), 2022.（Megatron Sequence Parallelism）
+4. Rajbhandari et al., [_ZeRO: Memory Optimizations Toward Training Trillion Parameter Models_](https://arxiv.org/abs/1910.02054), 2020.
+5. Liu et al., [_Ring Attention with Blockwise Transformers for Near-Infinite Context_](https://arxiv.org/abs/2310.01889), 2023.
+6. Jacobs et al., [_DeepSpeed Ulysses: System Optimizations for Enabling Training of Extreme Long Sequence Transformer Models_](https://arxiv.org/abs/2309.14509), 2023.
+7. NVIDIA, [_Megatron Context Parallelism_](https://docs.nvidia.com/megatron-core/developer-guide/latest/api-guide/context_parallel.html)（Ring P2P 与 a2a）.
+8. vLLM, [_Context Parallel Deployment_](https://docs.vllm.ai/en/latest/serving/context_parallel_deployment/)（DCP 不增加 GPU；PCP 加卡切 prefill）.
+9. Liu et al., [_DeepSeek-V3 Technical Report_](https://arxiv.org/abs/2412.19437), 2024.（§3.4 推理部署：prefill EP32 / decode EP320）
+10. Zhao et al., [_Insights into DeepSeek-V3: Scaling Challenges and Reflections on Hardware for AI Architectures_](https://arxiv.org/abs/2505.09343), 2025.
+11. DeepSeek, [_DeepEP: an efficient expert-parallel communication library_](https://github.com/deepseek-ai/DeepEP), 2025.
+12. LMSYS, [_Deploying DeepSeek with PD Disaggregation and Large-Scale Expert Parallelism on 96 H100 GPUs_](https://lmsys.org/blog/2025-05-05-large-scale-ep/), 2025.
+13. vLLM, [_Expert Parallel Deployment_](https://docs.vllm.ai/en/stable/serving/expert_parallel_deployment/)（`--enable-expert-parallel`，EP = TP×DP）.
+14. SGLang, [_Expert Parallelism_](https://docs.sglang.io/docs/advanced_features/expert_parallelism.html)（DeepEP / EPLB / TBO）.
+15. Chen et al., [_MegaScale-Infer: Serving Mixture-of-Experts at Scale with Disaggregated Expert Parallelism_](https://arxiv.org/abs/2504.02263), 2025.
+16. DeepSeek, [_One More Thing: DeepSeek-V3/R1 Inference System Overview_](https://github.com/deepseek-ai/open-infra-index/blob/main/202502OpenSourceWeek/day_6_one_more_thing_deepseekV3R1_inference_system_overview.md)（开源周：decode 单元的 EP144 写法与论文 EP320 不同）.

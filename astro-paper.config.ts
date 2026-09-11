@@ -33,7 +33,7 @@ export default defineAstroPaperConfig({
       repo: "xiangel/xiangel.github.io",
       repoId: "R_kgDOMu995g",
       category: "Announcements",
-      categoryId: "",
+      categoryId: "DIC_kwDOMu995s4DFMvA",
       lang: "zh-CN",
       reactionsEnabled: true,
     },

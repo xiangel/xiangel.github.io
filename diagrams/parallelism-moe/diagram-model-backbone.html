@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>Uncut decoder-only model</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:#f5f5f5}.frame{width:1000px}svg{width:100%;display:block}
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <svg viewBox="0 0 1000 520" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"/></pattern>
+        <marker id="ar" markerWidth="9" markerHeight="7" refX="7" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" fill="#2d3142"/></marker>
+      </defs>
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+      <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"/>
+
+      <text x="40" y="38" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.16em">DECODER-ONLY · 还没切开</text>
+      <text x="40" y="72" fill="#2d3142" font-size="26" font-family="'Instrument Serif','Noto Serif CJK SC',serif">先看清模型长什么样，再谈怎么切</text>
+      <text x="40" y="98" fill="#7a8399" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">激活张量一路是 [B, S, H]。六种并行分别切 batch、序列、hidden、层，或把 FFN 换成专家。</text>
+
+      <!-- tensor legend -->
+      <g font-family="'Geist Mono','Noto Sans CJK SC',monospace" font-size="12">
+        <rect x="40" y="118" width="70" height="36" rx="6" fill="rgba(235,108,54,0.10)" stroke="#eb6c36"/>
+        <text x="75" y="141" fill="#2d3142" text-anchor="middle">B</text>
+        <rect x="118" y="118" width="70" height="36" rx="6" fill="rgba(79,93,117,0.10)" stroke="#4f5d75"/>
+        <text x="153" y="141" fill="#2d3142" text-anchor="middle">S</text>
+        <rect x="196" y="118" width="70" height="36" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.28)"/>
+        <text x="231" y="141" fill="#2d3142" text-anchor="middle">H</text>
+      </g>
+      <text x="280" y="141" fill="#4f5d75" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">B = 请求数　S = 序列有几个 token　H = 每个 token 的 hidden size</text>
+
+      <!-- stack -->
+      <rect x="40" y="172" width="920" height="310" rx="10" fill="#ffffff" stroke="rgba(45,49,66,0.16)"/>
+
+      <rect x="64" y="192" width="200" height="48" rx="6" fill="rgba(79,93,117,0.08)" stroke="#4f5d75"/>
+      <text x="164" y="214" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">Embedding</text>
+      <text x="164" y="232" fill="#7a8399" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">词表 × H</text>
+
+      <line x1="164" y1="240" x2="164" y2="268" stroke="#2d3142" stroke-width="1.5" marker-end="url(#ar)"/>
+
+      <!-- one decoder block enlarged -->
+      <rect x="64" y="272" width="520" height="148" rx="8" fill="rgba(235,108,54,0.05)" stroke="#eb6c36"/>
+      <text x="80" y="296" fill="#eb6c36" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.10em">× N 层 DECODER BLOCK</text>
+
+      <rect x="80" y="312" width="150" height="88" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.22)"/>
+      <text x="155" y="348" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">RMSNorm</text>
+      <text x="155" y="368" fill="#7a8399" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">几乎无权重</text>
+      <text x="155" y="386" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">激活占显存</text>
+
+      <rect x="248" y="312" width="150" height="88" rx="6" fill="#ffffff" stroke="#eb6c36"/>
+      <text x="323" y="348" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">Attention</text>
+      <text x="323" y="368" fill="#7a8399" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">QKV · 读 KV</text>
+      <text x="323" y="386" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">KV 随 S 涨</text>
+
+      <rect x="416" y="312" width="150" height="88" rx="6" fill="#ffffff" stroke="#eb6c36"/>
+      <text x="491" y="348" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">FFN / MoE</text>
+      <text x="491" y="368" fill="#7a8399" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">Dense 或 Experts</text>
+      <text x="491" y="386" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">权重大户</text>
+
+      <line x1="164" y1="420" x2="164" y2="448" stroke="#2d3142" stroke-width="1.5" marker-end="url(#ar)"/>
+
+      <rect x="64" y="452" width="200" height="48" rx="6" fill="rgba(79,93,117,0.08)" stroke="#4f5d75"/>
+      <text x="164" y="474" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">LM Head</text>
+      <text x="164" y="492" fill="#7a8399" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">H × 词表</text>
+
+      <!-- right: what each dim means -->
+      <text x="620" y="214" fill="#2d3142" font-size="15" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">还没切时，一张卡要装下</text>
+      <g font-family="'Geist','Noto Sans CJK SC',sans-serif" font-size="13" fill="#4f5d75">
+        <text x="620" y="248">· 全部权重：Embed + N 层 + Head</text>
+        <text x="620" y="276">· 全部 KV：每层 Attention 一份，随 S 涨</text>
+        <text x="620" y="304">· 全部激活：当前 [B, S, H]</text>
+      </g>
+      <text x="620" y="348" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">六种并行分别下手的位置</text>
+      <g font-family="'Geist Mono','Noto Sans CJK SC',monospace" font-size="12" fill="#2d3142">
+        <text x="620" y="376">DP 切 B　　CP / SP 切 S　　TP 切 H</text>
+        <text x="620" y="400">PP 切层号 N　　EP 切 FFN 里的专家</text>
+      </g>
+      <text x="620" y="436" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">SP 只切 Norm 的激活，不切 Attention；</text>
+      <text x="620" y="458" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">CP 才把 Attention 看见的那段 S 切开。</text>
+    </svg>
+  </div>
+</body>
+</html>

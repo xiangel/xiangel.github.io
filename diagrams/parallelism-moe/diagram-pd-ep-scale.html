@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>Prefill EP32 vs Decode EP320</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:#f5f5f5}.frame{width:1000px}svg{width:100%;display:block}
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <svg viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"/></pattern>
+        <marker id="arA" markerWidth="9" markerHeight="7" refX="7" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" fill="#eb6c36"/></marker>
+      </defs>
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+      <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"/>
+
+      <text x="48" y="42" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.18em">DEEPSEEK-V3 推理单元 · 与第四篇咬合</text>
+      <text x="48" y="76" fill="#2d3142" font-size="26" font-family="'Instrument Serif','Noto Serif CJK SC',serif">Prefill 要小 EP，Decode 要大 EP</text>
+      <text x="48" y="102" fill="#7a8399" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">同一套并行度伺候不好两阶段 —— 这正是要做 PD 分离的理由</text>
+
+      <!-- Prefill unit -->
+      <rect x="48" y="128" width="440" height="332" rx="10" fill="rgba(235,108,54,0.06)" stroke="#eb6c36"/>
+      <rect x="64" y="144" width="88" height="16" rx="2" fill="transparent" stroke="rgba(235,108,54,0.50)"/>
+      <text x="108" y="156" fill="#eb6c36" font-size="9" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle" letter-spacing="0.10em">PREFILL</text>
+      <text x="64" y="186" fill="#2d3142" font-size="20" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">4 节点 / 32 GPU</text>
+      <text x="64" y="210" fill="#7a8399" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">算力密集，通信走高吞吐内核</text>
+
+      <rect x="64" y="232" width="408" height="64" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.18)"/>
+      <text x="80" y="258" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace">ATTENTION</text>
+      <text x="80" y="280" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">TP4 + SP + DP8</text>
+      <text x="300" y="280" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">KV 仍按 batch 摊</text>
+
+      <rect x="64" y="308" width="408" height="64" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.18)"/>
+      <text x="80" y="334" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace">MOE</text>
+      <text x="80" y="356" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">EP32</text>
+      <text x="168" y="356" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">每卡 8 个 routed + 1 个冗余</text>
+
+      <rect x="64" y="384" width="408" height="56" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.18)"/>
+      <text x="80" y="408" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace">冗余专家</text>
+      <text x="80" y="428" fill="#2d3142" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">32 个冗余 · 两个微批次重叠</text>
+
+      <!-- Decode unit -->
+      <rect x="512" y="128" width="440" height="332" rx="10" fill="#ffffff" stroke="rgba(45,49,66,0.22)"/>
+      <rect x="528" y="144" width="88" height="16" rx="2" fill="transparent" stroke="rgba(79,93,117,0.50)"/>
+      <text x="572" y="156" fill="#4f5d75" font-size="9" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle" letter-spacing="0.10em">DECODE</text>
+      <text x="528" y="186" fill="#2d3142" font-size="20" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">40 节点 / 320 GPU</text>
+      <text x="528" y="210" fill="#7a8399" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">访存密集，通信走低延迟内核</text>
+
+      <rect x="528" y="232" width="408" height="64" rx="6" fill="rgba(79,93,117,0.06)" stroke="rgba(45,49,66,0.18)"/>
+      <text x="544" y="258" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace">ATTENTION</text>
+      <text x="544" y="280" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">TP4 + SP + DP80</text>
+      <text x="780" y="280" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">更大 DP</text>
+
+      <rect x="528" y="308" width="408" height="64" rx="6" fill="rgba(79,93,117,0.06)" stroke="rgba(45,49,66,0.18)"/>
+      <text x="544" y="334" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace">MOE</text>
+      <text x="544" y="356" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">EP320</text>
+      <text x="640" y="356" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">每卡 1 个 routed 专家</text>
+
+      <rect x="528" y="384" width="408" height="56" rx="6" fill="rgba(79,93,117,0.06)" stroke="rgba(45,49,66,0.18)"/>
+      <text x="544" y="408" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace">冗余 + 共享</text>
+      <text x="544" y="428" fill="#2d3142" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">64 张卡给冗余和共享专家 · IB P2P + IBGDA</text>
+
+      <!-- LMSYS note + PD link -->
+      <rect x="48" y="480" width="904" height="84" rx="8" fill="#ffffff" stroke="rgba(45,49,66,0.18)"/>
+      <text x="68" y="510" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">开源侧的缩小版：LMSYS / SGLang 在 96×H100 上</text>
+      <text x="68" y="534" fill="#4f5d75" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">prefill EP32 · decode EP72（大约是 DeepSeek decode 规模的一半）· 相对 vanilla TP16 最高约 5×</text>
+      <text x="68" y="552" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">vLLM：`--enable-expert-parallel`（EP = TP×DP）· `--enable-eplb` · `--enable-dbo` · `--all2all-backend`</text>
+    </svg>
+  </div>
+</body>
+</html>

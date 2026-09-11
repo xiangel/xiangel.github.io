@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>EPLB hot expert replica</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:#f5f5f5}.frame{width:1000px}svg{width:100%;display:block}
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <svg viewBox="0 0 1000 540" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"/></pattern>
+        <marker id="arA" markerWidth="9" markerHeight="7" refX="7" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" fill="#eb6c36"/></marker>
+      </defs>
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+      <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"/>
+
+      <text x="48" y="42" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.18em">EPLB · EXPERT PARALLELISM LOAD BALANCER</text>
+      <text x="48" y="76" fill="#2d3142" font-size="26" font-family="'Instrument Serif','Noto Serif CJK SC',serif">把最热门的专家再复制一份，闲卡才有活干</text>
+      <text x="48" y="102" fill="#7a8399" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">路由不是均匀的：zipf 热点会让某几张卡变成 straggler</text>
+
+      <!-- popularity -->
+      <text x="48" y="138" fill="#4f5d75" font-size="10" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.10em">专家受欢迎程度（示意）</text>
+      <g font-family="'Geist Mono','Noto Sans CJK SC',monospace" font-size="10" text-anchor="middle">
+        <rect x="48" y="200" width="36" height="120" fill="#eb6c36"/>
+        <text x="66" y="336" fill="#2d3142">E0</text>
+        <rect x="92" y="236" width="36" height="84" fill="rgba(235,108,54,0.75)"/>
+        <text x="110" y="336" fill="#2d3142">E1</text>
+        <rect x="136" y="268" width="36" height="52" fill="rgba(79,93,117,0.45)"/>
+        <text x="154" y="336" fill="#2d3142">E2</text>
+        <rect x="180" y="284" width="36" height="36" fill="rgba(79,93,117,0.35)"/>
+        <text x="198" y="336" fill="#2d3142">E3</text>
+        <rect x="224" y="296" width="36" height="24" fill="rgba(79,93,117,0.28)"/>
+        <text x="242" y="336" fill="#2d3142">E4</text>
+        <rect x="268" y="304" width="36" height="16" fill="rgba(79,93,117,0.22)"/>
+        <text x="286" y="336" fill="#2d3142">E5</text>
+        <rect x="312" y="308" width="36" height="12" fill="rgba(79,93,117,0.18)"/>
+        <text x="330" y="336" fill="#2d3142">E6</text>
+        <rect x="356" y="312" width="36" height="8" fill="rgba(79,93,117,0.14)"/>
+        <text x="374" y="336" fill="#2d3142">E7</text>
+      </g>
+      <text x="48" y="188" fill="#eb6c36" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif">热点</text>
+      <text x="356" y="188" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif">长尾</text>
+
+      <!-- without EPLB -->
+      <rect x="432" y="128" width="520" height="168" rx="8" fill="#ffffff" stroke="rgba(45,49,66,0.18)"/>
+      <text x="452" y="156" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.10em">没有 EPLB</text>
+      <text x="452" y="178" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">E0 只住在 GPU 0 → GPU 0 被接爆</text>
+      <g font-family="'Geist','Noto Sans CJK SC',sans-serif" font-size="12" font-weight="600" text-anchor="middle">
+        <rect x="452" y="196" width="110" height="72" rx="6" fill="rgba(235,108,54,0.16)" stroke="#eb6c36" stroke-width="1.6"/>
+        <text x="507" y="224" fill="#2d3142">GPU 0</text>
+        <text x="507" y="244" fill="#eb6c36" font-size="11">E0 E1 · 过载</text>
+        <rect x="576" y="196" width="110" height="72" rx="6" fill="rgba(79,93,117,0.08)" stroke="#4f5d75"/>
+        <text x="631" y="224" fill="#2d3142">GPU 1</text>
+        <text x="631" y="244" fill="#7a8399" font-size="11">E2 E3 · 正常</text>
+        <rect x="700" y="196" width="110" height="72" rx="6" fill="rgba(79,93,117,0.05)" stroke="rgba(45,49,66,0.22)"/>
+        <text x="755" y="224" fill="#2d3142">GPU 2</text>
+        <text x="755" y="244" fill="#7a8399" font-size="11">E4 E5 · 偏闲</text>
+        <rect x="824" y="196" width="110" height="72" rx="6" fill="#f5f5f5" stroke="rgba(45,49,66,0.18)" stroke-dasharray="4 3"/>
+        <text x="879" y="224" fill="#2d3142">GPU 3</text>
+        <text x="879" y="244" fill="#7a8399" font-size="11">E6 E7 · 空转</text>
+      </g>
+
+      <!-- with EPLB -->
+      <rect x="432" y="316" width="520" height="180" rx="8" fill="rgba(235,108,54,0.06)" stroke="#eb6c36"/>
+      <text x="452" y="344" fill="#eb6c36" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.10em">加上 EPLB</text>
+      <text x="452" y="366" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">给 E0 在空闲卡上放一份冗余副本</text>
+      <g font-family="'Geist','Noto Sans CJK SC',sans-serif" font-size="12" font-weight="600" text-anchor="middle">
+        <rect x="452" y="384" width="110" height="72" rx="6" fill="#ffffff" stroke="#eb6c36"/>
+        <text x="507" y="412" fill="#2d3142">GPU 0</text>
+        <text x="507" y="432" fill="#4f5d75" font-size="11">E0 E1 · 一半</text>
+        <rect x="576" y="384" width="110" height="72" rx="6" fill="#ffffff" stroke="#4f5d75"/>
+        <text x="631" y="412" fill="#2d3142">GPU 1</text>
+        <text x="631" y="432" fill="#4f5d75" font-size="11">E2 E3</text>
+        <rect x="700" y="384" width="110" height="72" rx="6" fill="#ffffff" stroke="#4f5d75"/>
+        <text x="755" y="412" fill="#2d3142">GPU 2</text>
+        <text x="755" y="432" fill="#4f5d75" font-size="11">E4 E5</text>
+        <rect x="824" y="384" width="110" height="72" rx="6" fill="#ffffff" stroke="#eb6c36" stroke-width="1.6"/>
+        <text x="879" y="412" fill="#2d3142">GPU 3</text>
+        <text x="879" y="432" fill="#eb6c36" font-size="11">E0′ E6 E7</text>
+      </g>
+      <text x="692" y="478" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">新来的 E0 token 发给当前更轻的那份副本 · 墙钟跟最忙的卡走</text>
+
+      <text x="48" y="380" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">DeepSeek-V3 prefill：</text>
+      <text x="48" y="402" fill="#2d3142" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">32 个冗余专家</text>
+      <text x="48" y="424" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">EP32 上每卡 8+1</text>
+      <text x="48" y="454" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">LMSYS 96×H100：</text>
+      <text x="48" y="476" fill="#2d3142" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">EPLB ≈ 1.49× prefill</text>
+      <text x="48" y="498" fill="#2d3142" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">≈ 2.54× decode</text>
+    </svg>
+  </div>
+</body>
+</html>

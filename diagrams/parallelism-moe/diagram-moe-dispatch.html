@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>MoE dispatch combine</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:#f5f5f5}.frame{width:1000px}svg{width:100%;display:block}
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <svg viewBox="0 0 1000 560" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"/></pattern>
+        <marker id="ar" markerWidth="9" markerHeight="7" refX="7" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" fill="#2d3142"/></marker>
+        <marker id="arA" markerWidth="9" markerHeight="7" refX="7" refY="3.5" orient="auto"><polygon points="0 0, 9 3.5, 0 7" fill="#eb6c36"/></marker>
+      </defs>
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+      <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"/>
+
+      <text x="48" y="42" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.18em">EXPERT PARALLEL · MOE</text>
+      <text x="48" y="76" fill="#2d3142" font-size="26" font-family="'Instrument Serif','Noto Serif CJK SC',serif">token 按路由飞向专家，再飞回来</text>
+      <text x="48" y="102" fill="#7a8399" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">DeepSeekMoE：671B 总参数，约 37B 激活；1 个共享专家 + 256 个路由专家，top-8</text>
+
+      <!-- tokens -->
+      <text x="48" y="140" fill="#4f5d75" font-size="10" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.10em">TOKEN 隐状态</text>
+      <g font-family="'Geist Mono','Noto Sans CJK SC',monospace" font-size="11" text-anchor="middle">
+        <rect x="48" y="152" width="70" height="36" rx="4" fill="#ffffff" stroke="rgba(45,49,66,0.28)"/><text x="83" y="175" fill="#2d3142">t₀</text>
+        <rect x="48" y="196" width="70" height="36" rx="4" fill="#ffffff" stroke="rgba(45,49,66,0.28)"/><text x="83" y="219" fill="#2d3142">t₁</text>
+        <rect x="48" y="240" width="70" height="36" rx="4" fill="#ffffff" stroke="rgba(45,49,66,0.28)"/><text x="83" y="263" fill="#2d3142">t₂</text>
+        <rect x="48" y="284" width="70" height="36" rx="4" fill="#ffffff" stroke="rgba(45,49,66,0.28)"/><text x="83" y="307" fill="#2d3142">t₃</text>
+      </g>
+
+      <line x1="122" y1="248" x2="168" y2="248" stroke="#2d3142" stroke-width="1.6" marker-end="url(#ar)"/>
+
+      <!-- router -->
+      <rect x="172" y="176" width="132" height="144" rx="8" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1.4"/>
+      <rect x="188" y="192" width="100" height="16" rx="2" fill="transparent" stroke="rgba(235,108,54,0.50)"/>
+      <text x="238" y="204" fill="#eb6c36" font-size="9" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle" letter-spacing="0.10em">ROUTER</text>
+      <text x="238" y="236" fill="#2d3142" font-size="15" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">门控 / Gate</text>
+      <text x="238" y="258" fill="#4f5d75" font-size="12" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">top-k = 8</text>
+      <text x="238" y="280" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">每个 token</text>
+      <text x="238" y="296" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">选 8 个专家</text>
+
+      <line x1="308" y1="248" x2="354" y2="248" stroke="#eb6c36" stroke-width="1.8" marker-end="url(#arA)"/>
+
+      <!-- dispatch -->
+      <rect x="358" y="200" width="120" height="96" rx="8" fill="#ffffff" stroke="rgba(45,49,66,0.22)"/>
+      <text x="418" y="236" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">Dispatch</text>
+      <text x="418" y="256" fill="#eb6c36" font-size="12" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">all-to-all</text>
+      <text x="418" y="276" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">按专家打包发送</text>
+
+      <!-- arrows to experts -->
+      <line x1="482" y1="228" x2="528" y2="176" stroke="#2d3142" stroke-width="1.4" marker-end="url(#ar)"/>
+      <line x1="482" y1="248" x2="528" y2="248" stroke="#2d3142" stroke-width="1.4" marker-end="url(#ar)"/>
+      <line x1="482" y1="268" x2="528" y2="320" stroke="#2d3142" stroke-width="1.4" marker-end="url(#ar)"/>
+
+      <!-- expert GPUs -->
+      <text x="532" y="140" fill="#4f5d75" font-size="10" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.10em">EXPERT 驻留 · GROUPED GEMM</text>
+      <g font-family="'Geist','Noto Sans CJK SC',sans-serif">
+        <rect x="532" y="152" width="200" height="56" rx="6" fill="rgba(235,108,54,0.10)" stroke="#eb6c36"/>
+        <text x="548" y="176" fill="#2d3142" font-size="13" font-weight="600">GPU 0 · E0–E7</text>
+        <text x="548" y="194" fill="#7a8399" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace">收到 t₀,t₂ 的若干份</text>
+        <rect x="532" y="220" width="200" height="56" rx="6" fill="rgba(79,93,117,0.10)" stroke="#4f5d75"/>
+        <text x="548" y="244" fill="#2d3142" font-size="13" font-weight="600">GPU 1 · E8–E15</text>
+        <text x="548" y="262" fill="#7a8399" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace">收到 t₁,t₃ 的若干份</text>
+        <rect x="532" y="288" width="200" height="56" rx="6" fill="rgba(79,93,117,0.10)" stroke="#4f5d75"/>
+        <text x="548" y="312" fill="#2d3142" font-size="13" font-weight="600">GPU 2 · E16–E23</text>
+        <text x="548" y="330" fill="#7a8399" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace">收到 t₀,t₁ 的若干份</text>
+      </g>
+      <rect x="532" y="356" width="200" height="40" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.18)"/>
+      <text x="632" y="381" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">… 直到 EP 度的所有卡</text>
+
+      <!-- combine -->
+      <line x1="736" y1="248" x2="780" y2="248" stroke="#eb6c36" stroke-width="1.8" marker-end="url(#arA)"/>
+      <rect x="784" y="200" width="168" height="96" rx="8" fill="#ffffff" stroke="rgba(45,49,66,0.22)"/>
+      <text x="868" y="236" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">Combine</text>
+      <text x="868" y="256" fill="#eb6c36" font-size="12" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">all-to-all</text>
+      <text x="868" y="276" fill="#7a8399" font-size="11" font-family="'Geist','Noto Sans CJK SC',sans-serif" text-anchor="middle">加权求和写回</text>
+
+      <!-- shared expert note -->
+      <rect x="48" y="420" width="436" height="100" rx="8" fill="#ffffff" stroke="rgba(45,49,66,0.18)"/>
+      <text x="68" y="450" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">为什么不用 TP 切专家？</text>
+      <text x="68" y="474" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">单个 expert 的 GEMM 已经很小（稀疏激活）。再用 TP 切开，</text>
+      <text x="68" y="494" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">通信占比会高到不划算。专家是天然的并行粒度，所以改切 EP。</text>
+
+      <rect x="504" y="420" width="448" height="100" rx="8" fill="rgba(235,108,54,0.06)" stroke="#eb6c36"/>
+      <text x="524" y="450" fill="#eb6c36" font-size="14" font-weight="600" font-family="'Geist','Noto Sans CJK SC',sans-serif">Attention 怎么办？</text>
+      <text x="524" y="474" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">MLA / GQA 仍要一份完整的 KV。常见做法是 DP Attention：</text>
+      <text x="524" y="494" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans CJK SC',sans-serif">attention 按 batch 复制，MoE 按专家切开，两套并行叠在一起。</text>
+    </svg>
+  </div>
+</body>
+</html>

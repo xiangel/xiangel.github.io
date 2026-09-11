@@ -11,7 +11,7 @@ tags:
   - 上下文并行
   - MoE
   - LLM
-description: 一张卡装不下，就得把模型切开——但并行远不止 TP。用 decoder 结构图对照 TP / SP / PP / DP / CP / EP 各切哪一段，并写清每刀对显存、通信、延迟和缓存的影响与硬约束。附 MoE 的 DeepEP / EPLB，以及一组无需 GPU、可复现的仿真。
+description: 一张卡装不下，就得把模型切开——但并行远不止 TP。用 decoder 结构图对照 TP / SP / PP / DP / CP / EP 各切哪一段，并写清每刀对显存、通信、延迟和缓存的影响与硬约束。附 MoE 的 DeepEP / EPLB。
 ---
 
 并行这两个字，在大模型圈子里被用滥了。有人说的 TP，有人说的 SP，还有人把 DeepSpeed 的 Ulysses 也叫序列并行。名字听着像一家，切的维、通信形态、适用场景完全不是一回事。这篇就把桌上能见到的刀一次摊开。
@@ -107,13 +107,13 @@ description: 一张卡装不下，就得把模型切开——但并行远不止 
 
 Ring all-reduce 的数据量正比于 **(t−1)/t**。这个式子有个不太直观的后果：TP 从 1 到 2，通信从 0 一下子跳到"全量的一半"；再往上，增量变缓，但每一次都要等所有卡对齐。墙钟既取决于最慢的那张卡，也取决于这次同步走的是哪条线——同一机箱里的 NVLink，还是机箱外面的 InfiniBand。
 
-所以 TP 有一条硬约束：**尽量停在 NVLink 域里**。常见的是单机 8 卡，或者 NVLink 连起来的超节点。H100 节点内 NVLink 是数百 GB/s 这个量级；一出节点，InfiniBand 掉到数十 GB/s，延迟也高一个数量级。实验 A 会把这条线画出来：同样算一层，NVLink 上加大 TP 还在加速，IB 上通信很快反超计算。这也解释了 DeepSeek-V3 为什么把 attention 的 TP **钉死在 4**——论文原话就是用小 TP 限制通信开销。再大，切出来的计算更碎，同步却更密。
+所以 TP 有一条硬约束：**尽量停在 NVLink 域里**。常见的是单机 8 卡，或者 NVLink 连起来的超节点。H100 节点内 NVLink 是数百 GB/s 这个量级；一出节点，InfiniBand 掉到数十 GB/s，延迟也高一个数量级。同样算一层，NVLink 上加大 TP 往往还在加速，IB 上通信很快反超计算。这也解释了 DeepSeek-V3 为什么把 attention 的 TP **钉死在 4**——论文原话就是用小 TP 限制通信开销。再大，切出来的计算更碎，同步却更密。
 
 词表和 LM Head 通常也跟着 TP 切，叫 **vocab parallel**：embedding 按词表维切开，最后的 softmax 只在各卡的那一段词表上做，再做一个并行的采样。它不是独立的第七刀，是 TP 在模型两头的延伸。
 
 **影响与约束。** 权重按 `1/t` 变薄，这是 TP 能把 70B 塞进多张 80GB 卡的原因。但有三笔账立刻上门。
 
-第一笔是**通信**。一层两次 all-reduce，体积正比于 `(t−1)/t`。Prefill 序列长、算得动，NVLink 上加大 TP 往往还在加速；decode 每步只推一个 token，消息小、次数密，延迟项比带宽项更刺。实验 A 里 IB 上把 TP 开到 16，一层已经慢于单卡——不是算力不够，是报数报不过来。
+第一笔是**通信**。一层两次 all-reduce，体积正比于 `(t−1)/t`。Prefill 序列长、算得动，NVLink 上加大 TP 往往还在加速；decode 每步只推一个 token，消息小、次数密，延迟项比带宽项更刺。一出节点再把 TP 开大，很容易让通信反超计算——不是算力不够，是报数报不过来。
 
 第二笔是 **KV**。很多人以为"切了权重，KV 也会变薄"。GQA / MLA 的 KV 头本来就少，`t` 大于 `num_kv_heads` 时，实现会把同一份 KV **复制**到多张卡上。权重省了，KV 反而更肥。这正是第六节 DCP 要砍掉的那截复制。
 
@@ -204,7 +204,7 @@ DP Attention 还改写了"DP 不说话"这条。token 从"按请求切"的 atten
 
 **Ulysses（DeepSpeed；Megatron 里也叫 a2a）。** 两次 all-to-all 换轴：先按序列切开拿到 QKV，再换成按注意力头切开——每张卡拿到**完整序列、但只有一部分头**，注意力在本地做完，再 all-to-all 换回去。体积大约是 `2 · S · hidden / C`。一次集体通信，NVLink 上往往比一圈 P2P 更快；约束是头数得 ≥ CP 度。跨节点则常退回 Ring。
 
-实验 D 会把这两种载荷和 TP 的激活同步画在同一张图上：序列一长，该切 CP，而不是把 TP 再加大。
+序列一长，该切 CP，而不是把 TP 再加大：Ring 吃的是 `d_kv`，TP 同步吃的是整个 `hidden`，GQA / MLA 下两者能差一个数量级。
 
 推理还要再拆一刀，因为 prefill 和 decode 的 KV 形状完全不同。
 
@@ -212,7 +212,7 @@ DP Attention 还改写了"DP 不说话"这条。token 从"按请求切"的 atten
 
 **Prefill Context Parallel（PCP）。** 才真正加卡。一条超长 prompt 按序列切开，用来压 TTFT。world size 变成 `TP × PCP`。vLLM 对应 `--prefill-context-parallel-size`。它和 DCP 正交，不要共用一个开关：一个改的是"decode 时 KV 怎么摊在已有卡上"，一个改的是"prefill 要不要多叫几张卡来切序列"。
 
-**影响与约束。** CP 打的是 KV：按 `C` 切开之后，每卡大约只留 `1/C` 的缓存，32k、128k 才装得下。权重几乎没变薄，所以它**补的是 TP 做不到的那一刀**，不是 TP 的替代品。实验 D 把数量级钉死：切错维，字节数差一个数量级。
+**影响与约束。** CP 打的是 KV：按 `C` 切开之后，每卡大约只留 `1/C` 的缓存，32k、128k 才装得下。权重几乎没变薄，所以它**补的是 TP 做不到的那一刀**，不是 TP 的替代品。切错维，通信载荷会差一个数量级。
 
 通信是每步都要付的。Ring 能和计算重叠，但 hop 随 `C` 涨；Ulysses 一次 all-to-all 在 NVLink 上更快，**头数必须 ≥ CP 度**，跨节点常退回 Ring。Decode 更苛刻：每步只有一个新 Q，却要扫很长的 KV。DCP 复用 TP 组、不加卡，上界大约 `tp / num_kv_heads`，开太大，省下的 HBM 会被通信吃回去。PCP 加卡压 TTFT，会乘进 world size。因果掩码没有被切掉：你分得再碎，逻辑上还是要看完整前缀。
 
@@ -247,13 +247,13 @@ Dense 模型的 FFN 是一整块大矩阵，用 TP 切开是划算的：切片�
 
 EP 把两个新问题同时放到台面上。它们不是先后发生的，而是同一套 all-to-all 上的两面：一面是**谁更忙**，一面是**通信本身怎么走**。
 
-**问题一：热点专家。** 真实流量的路由几乎从来不是均匀的，更接近 zipf：少数专家吃掉大部分 token。你就算把 256 个专家整齐地每卡放 8 个，最热的那几个如果碰巧住在同一张卡上，这张卡就会变成整层的 straggler。DeepSeek-V3 的对策是两步一起做。
+**问题一：热点专家。** 真实流量的路由几乎从来不是均匀的，更接近 zipf：少数专家吃掉大部分 token。你就算把 256 个专家整齐地每卡放 8 个，最热门的那几个如果碰巧住在同一张卡上，这张卡就会变成整层的 straggler。DeepSeek-V3 的对策是两步一起做。
 
-第一步，先承认热点存在，给最烫的专家做 **冗余副本（redundant experts）**。统计一段时间里谁被选得最多，把这些专家**再复制一份**放到相对空闲的卡上；新来的 token 发给当前更轻的那份副本。第二步，用 **EPLB（Expert Parallelism Load Balancer）** 在节点内重排专家，尽量让热的和冷的搭在一起，并且不要为此增加跨节点 all-to-all——跨节点比节点内贵得多。
+第一步，先承认热点存在，给最热门的专家做 **冗余副本（redundant experts）**。统计一段时间里谁被选得最多，把这些专家**再复制一份**放到相对空闲的卡上；新来的 token 发给当前更轻的那份副本。第二步，用 **EPLB（Expert Parallelism Load Balancer）** 在节点内重排专家，尽量让热的和冷的搭在一起，并且不要为此增加跨节点 all-to-all——跨节点比节点内贵得多。
 
-数字可以对照着看。Prefill 部署了 **32 个冗余专家**，EP32 上每卡从 8 个 routed 变成 **8+1**。Decode 更进一步，把共享专家也当成一个"永远被选中的热专家"，64 张卡专门托管冗余和共享。LMSYS 后来在 96×H100 上做消融，EPLB 带来大约 **1.49× prefill / 2.54× decode** 的吞吐——decode 受益更大，因为 EP 更大、不均被放大得更厉害。实验 C 会把"只改放置"和"再加副本"这两步分开量。
+数字可以对照着看。Prefill 部署了 **32 个冗余专家**，EP32 上每卡从 8 个 routed 变成 **8+1**。Decode 更进一步，把共享专家也当成一个"永远被选中的热专家"，64 张卡专门托管冗余和共享。LMSYS 后来在 96×H100 上做消融，EPLB 带来大约 **1.49× prefill / 2.54× decode** 的吞吐——decode 受益更大，因为 EP 更大、不均被放大得更厉害。
 
-![zipf 热点让单卡过载；EPLB 把最烫的专家复制到闲卡，墙钟跟最忙的卡走](/assets/posts/llm-inference-parallelism-moe/diagram-eplb.png)
+![zipf 热点让单卡过载；EPLB 把最热门的专家复制到闲卡，墙钟跟最忙的卡走](/assets/posts/llm-inference-parallelism-moe/diagram-eplb.png)
 
 **问题二：通信形态随阶段而变。** 就算专家放匀了，all-to-all 还在。Prefill 一次 dispatch 往往带着很长的一段序列，消息大，瓶颈在**带宽**；decode 每步只有一个新 token，消息小，瓶颈在**延迟**——启动一次通信、握手、绕过 CPU，本身就可能比有效载荷更贵。DeepEP 为此做了两种内核，而不是用一个内核应付两种流量：
 
@@ -284,7 +284,7 @@ EP 把两个新问题同时放到台面上。它们不是先后发生的，而�
 | 冗余      | 32 个冗余专家                      | 64 张卡托管冗余 + 共享        |
 | 通信      | 高吞吐内核 + 双微批次              | IB P2P + IBGDA                |
 
-可以按行读一遍。Attention 两侧都钉死 **TP4 + SP**：节点内同步还便宜，再大就不划算，实验 A 会印证这一点。两边真正拉开的是 DP 和 EP。Prefill 算力密集，专家不必摊得太碎，**EP32** 就能喂饱计算，每卡还留得下 8 个 routed 加 1 个冗余。Decode 访存密集，权重和 KV 都在抢带宽，于是把专家摊到 **EP320**，每卡只住 1 个 routed——单卡上的权重更少，就能进更大的 batch，聚合起来的 HBM 带宽才够把 decode 喂饱。通信内核也跟着阶段走：prefill 打带宽，decode 走 IB 点对点和 IBGDA 压延迟。
+可以按行读一遍。Attention 两侧都钉死 **TP4 + SP**：节点内同步还便宜，再大就不划算。两边真正拉开的是 DP 和 EP。Prefill 算力密集，专家不必摊得太碎，**EP32** 就能喂饱计算，每卡还留得下 8 个 routed 加 1 个冗余。Decode 访存密集，权重和 KV 都在抢带宽，于是把专家摊到 **EP320**，每卡只住 1 个 routed——单卡上的权重更少，就能进更大的 batch，聚合起来的 HBM 带宽才够把 decode 喂饱。通信内核也跟着阶段走：prefill 打带宽，decode 走 IB 点对点和 IBGDA 压延迟。
 
 数字本身不是教条。后来 DeepSeek 开源周的系统概述里，decode 单元收成过 **EP144 / 18 节点** 的写法，和论文的 EP320 不是同一版部署。硬件换一代、流量结构一变，具体 EP 会改。不变的是原则：**两阶段不要共用一套并行度。**
 
@@ -307,113 +307,7 @@ EP 把两个新问题同时放到台面上。它们不是先后发生的，而�
 
 EP 把 FFN 按专家切开之后，还可以再走一步：**把 attention 和 MoE FFN 拆到两类机器上**。ByteDance 的 MegaScale-Infer 做的就是这件事——attention 机器盯 KV 和延迟，专家机器盯吞吐。它不是第七种切维，是模块分离：和[第四篇](/posts/llm-inference-pd-disaggregation/)的 PD 分离同一思路，只是切的对象从"两个阶段"换成"两种算子"。本篇不展开它的调度，只把它从六刀里拿出去，免得和 EP 叠在一起分不清。
 
-## 十、四组无需 GPU 的实验
-
-下面四组实验都在 CPU 上跑，`SEED=42` 可复现。它们**不是**端到端 GPU benchmark，也不会复现 LMSYS 那组 5×。实验 A 是一层 decoder 的解析墙钟：计算按 `1/TP` 缩放，通信按 ring all-reduce 估价。实验 B 直接代入流水线气泡公式。实验 C 是 zipf 路由下的 GPU 负载，不管字节数，只看谁最忙。实验 D 只算一层注意力附近的通信载荷：TP 激活同步 vs Ring CP / Ulysses。目的是把正文里的数量级钉死，方便对照，不代替真机上的 kernel 剖面。脚本在 `diagrams/parallelism-moe/sim_experiments.py`。
-
-### 实验 A：TP 计算 vs all-reduce —— NVLink 还在加速，IB 上通信反超
-
-一层做两次 all-reduce（attention 出口 + MLP 出口）。激活按 `hidden × tokens × 2` 字节算（bf16，hidden=8192）。Ring all-reduce 是 `2(t−1)` 跳，每跳发送 `nbytes/t`。NVLink 按 400 GB/s、2 µs/hop 估价；IB 按 50 GB/s、10 µs/hop。Prefill 取 4096 token，TP=1 时计算 6.0 ms；decode 取 64 路并发，TP=1 时计算 0.55 ms——decode 这一侧按访存主导给了一个粗口径，不假装是算力屋顶。
-
-```python
-def ring_allreduce_ms(nbytes, tp, bw_GBps, hop_lat_us):
-    if tp <= 1:
-        return 0.0
-    hops = 2 * (tp - 1)
-    chunk = nbytes / tp
-    return hops * hop_lat_us / 1000.0 + hops * chunk / (bw_GBps * 1e6)
-
-def layer_ms(tp, tokens, compute_tp1, bw, lat_us, hidden=8192):
-    compute = compute_tp1 / tp
-    nbytes = hidden * tokens * 2          # bf16 激活
-    comm = 2 * ring_allreduce_ms(nbytes, tp, bw, lat_us)  # 一层两次
-    return compute + comm
-```
-
-![Prefill 在 NVLink 上随 TP 下降、在 IB 上几乎走平；Decode 在 NVLink 上 TP8 最好，在 IB 上 TP16 已经慢于 TP1](/assets/posts/llm-inference-parallelism-moe/sim-tp-compute-vs-comm.png)
-
-一手结果（一层 decoder 墙钟）：
-
-| TP  | Prefill · NVLink | Prefill · IB | Decode · NVLink | Decode · IB |
-| --- | ---------------- | ------------ | --------------- | ----------- |
-| 1   | 6.000 ms         | 6.000 ms     | 0.550 ms        | 0.550 ms    |
-| 2   | 3.344            | 5.724        | 0.288           | 0.357       |
-| 4   | 2.027            | **5.647**    | 0.169           | **0.320**   |
-| 8   | 1.393            | 5.728        | **0.134**       | 0.422       |
-| 16  | **1.124**        | 6.008        | 0.164           | 0.713       |
-
-Prefill 在 NVLink 上从 TP1 到 TP16 仍有 **5.3×**，计算还盖得住通信。同样一层换到 IB 上，最好的点是 TP4，也只比单卡快 6%；TP16 已经略慢于 TP1——跨节点做大 TP，等于花钱买同步。Decode 对延迟更敏感：NVLink 的甜点在 **TP8**，再往上 hop 数把延迟项抬起来，TP16 反而回退；IB 上 TP16 是 TP1 的 **1.3 倍慢**。这就是正文里那句"TP 停在节点内、attention 钉在 TP4"的数量级来源：不是不能切到 8 或 16，是一出节点，切得越大越亏。
-
-### 实验 B：PP 气泡 —— batch=1 时利用率按 1/p 塌掉
-
-```python
-def utilization(p, m):
-    return m / (m + p - 1)          # 理想利用率；气泡 = (p-1)/(m+p-1)
-```
-
-![PP 阶段越多、微批次越少，理想利用率越低；m=1 时 PP=8 只剩 12.5%](/assets/posts/llm-inference-parallelism-moe/sim-pp-bubble.png)
-
-一手结果：
-
-|       | m=1       | m=4   | m=8   | m=32  |
-| ----- | --------- | ----- | ----- | ----- |
-| PP=2  | 50.0%     | 80.0% | 88.9% | 97.0% |
-| PP=4  | 25.0%     | 57.1% | 72.7% | 91.4% |
-| PP=8  | **12.5%** | 36.4% | 53.3% | 82.1% |
-| PP=16 | **6.2%**  | 21.1% | 34.8% | 68.1% |
-
-训练可以把 `m` 堆到 32 以上，PP=8 还能到 82%，气泡被大 batch 稀释掉了。**在线 decode 的 `m` 往往接近 1**，同一张表上 PP=8 只剩八分之一的卡在干活，PP=16 更只剩 6%。这个公式完全不涉及 GPU 型号，却足够解释为什么推理单元更愿意把跨节点预算花在 EP 而不是 PP 上：EP 至少让每张卡都有专家可算，PP 在 batch=1 时会让大部分阶段空转。
-
-### 实验 C：zipf 路由 vs EPLB —— 冗余副本把 straggler 压下来
-
-256 个专家、32 张 GPU（EP32，每卡先放 8 个专家）、top-8、8 万 token，路由按 zipf（`a=1.15`）。对比三种放置。第一种最朴素：专家 0–7 连续放在 GPU 0——而 zipf 里编号越小越热，等于把最烫的一簇堆在同一张卡上。第二种按热度贪心装箱，热的优先放到当前最轻的卡，但每个专家仍然只有一份。第三种在装箱后再给最热的 32 个专家加一份冗余。每个 token 发给该专家当前最轻的那份副本。墙钟用 `max / mean` 近似：均值是"如果完全均匀该是多少"，最大值是 straggler。
-
-```python
-# routes[i] = 第 i 个 token 的 top-k 专家；owner_lists[e] = 持有专家 e 的 GPU 列表
-load = np.zeros(n_gpus)
-for e in routes.ravel():
-    owners = owner_lists[e]
-    g = owners[int(np.argmin(load[owners]))]   # 发给当前最轻的副本
-    load[g] += 1
-imbalance = load.max() / load.mean()
-```
-
-![左：专家热度呈 zipf；右：连续放置 13.96× 不均，装箱降到 3.73×，再加 32 个冗余降到 2.11×](/assets/posts/llm-inference-parallelism-moe/sim-eplb-imbalance.png)
-
-一手结果：
-
-| 放置                         | max / mean |
-| ---------------------------- | ---------- |
-| 连续放置（热专家挤在 GPU 0） | **13.96×** |
-| 按热度装箱                   | 3.73×      |
-| 装箱 + 32 冗余               | **2.11×**  |
-
-只改放置、不加副本，不均已经从将近 14 倍掉到 3.7 倍——说明"热专家碰巧住在一起"本身就很伤。再复制 32 个最烫的专家，straggler 降到 2.1 倍。这和 LMSYS 说的"EPLB 在大规模下把吞吐拉起来"是同一件事的负载侧：墙钟不看平均值，看最忙的那张卡。仿真没有建模 all-to-all 的字节数，也没有 kernel 启动，所以**不能**把 13.96 → 2.11 直接读成 1.49× / 2.54× 那些端到端数字。那些来自真机，见第九节。这里只说明：冗余副本解决的是"谁更忙"，不是"通信有多贵"。
-
-### 实验 D：长序列该切 CP，而不是把 TP 再加大
-
-hidden=8192，GQA 的 `d_kv=1024`，CP 度 `C=8`，bf16。只比较一层注意力附近的通信载荷，不算计算、也不算 hop 延迟。
-
-```python
-tp_mb = 2 * S * hidden * 2 / 1e6                 # 两次激活 all-reduce
-ring_mb = (1 - 1 / C) * S * d_kv * 2 * 2 / 1e6   # 环传 K+V
-ulysses_mb = 2 * S * hidden * 2 / C / 1e6        # 两次 all-to-all 换轴
-```
-
-![序列从 2k 拉到 128k，TP 激活同步涨到 4.3 GB；Ring CP（GQA）和 Ulysses 仍在数百 MB](/assets/posts/llm-inference-parallelism-moe/sim-cp-vs-tp-comm.png)
-
-一手结果（一层通信载荷，MB / GPU）：
-
-| S      | TP all-reduce | Ring CP | Ulysses |
-| ------ | ------------- | ------- | ------- |
-| 2048   | 67.1          | 7.3     | 8.4     |
-| 8192   | 268.4         | 29.4    | 33.6    |
-| 32768  | 1073.7        | 117.4   | 134.2   |
-| 131072 | **4295.0**    | 469.8   | 536.9   |
-
-S=2048 时，Ring 已经只有 TP 激活同步的约 **1/9**；到 128k，TP 一侧涨到 **4.3 GB**，Ring / Ulysses 还在 470–540 MB。这就是第六节那句话的数量级：长上下文该切序列，不该把 TP 再加大——GQA 把 KV 头压得很窄，环传吃的是 `d_kv`，TP 同步吃的是整个 `hidden`。仿真没有建模 ring 的 hop 延迟，也没有 all-to-all 的集体启动，所以不能直接读成墙钟。它只说明：**切错维，字节数会差一个数量级。**
-
-## 十一、总结与延伸
+## 十、总结与延伸
 
 并行策略的主线，还是那条"发现问题 → 引入优化 → 带出新问题"的链子：
 

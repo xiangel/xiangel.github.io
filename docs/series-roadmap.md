@@ -12,23 +12,23 @@
 
 ## 总览
 
-| #   | 篇目                                       | 覆盖的框架模块                                                | 贯穿类比                | 无 GPU 实验                                   | 状态 |
-| --- | ------------------------------------------ | ------------------------------------------------------------ | ----------------------- | --------------------------------------------- | ---- |
-| 1   | 从 Transformer 出发来看推理系统            | 模块全景 / Engine 入口 / API Server                          | —                       | 前向计算与 KV 增长可视化                      | ✅   |
-| 2   | KV Cache 详解：PagedAttention 到 Prefix Caching | KV Cache Manager / BlockPool / RadixAttention           | 图书馆借还书            | 分页/前缀命中率与碎片仿真                      | ✅   |
-| 3   | 推理调度（单机篇）：Continuous Batching 到缓存感知调度 | Scheduler（单机 step 循环）                          | OS 的 CPU 调度          | 排队/批处理吞吐与时延仿真                      | ✅   |
-| 4   | PD 分离：把 Prefill 和 Decode 拆到不同 GPU 池 | KVConnector / KV transfer                                  | 工厂车间的专业化分工    | P/D 配比与传输开销仿真                         | ✅   |
-| 5   | 推理调度（分布式篇）：缓存感知路由到全局准入控制 | Router / 准入控制 / 扩缩容                                | 打车平台派单中心        | 缓存感知路由 / 亲和 vs 均衡 / 早拒绝仿真       | ✅   |
-| 6   | 大模型的各种并行：从张量切分到上下文并行     | Model Executor / TP·SP·PP·DP·CP·EP / EPLB·DeepEP             | 大厨团队的分工          | TP 通信、PP 气泡、EPLB 不均、CP vs TP 载荷     | 🚧   |
-| 7   | 推理模型（long-CoT）服务                    | 调度 + KV 生命周期在长思维链下的新负载                       | 考场里的大考            | 长 CoT 下 KV 占用与 straggler 仿真            | ⬜   |
-| 8   | GPU 架构与现有 GPU（含 Attention Kernel）   | 硬件 / Roofline / Attention Kernels（FlashInfer/FA3）        | GPU = 一座工厂          | Roofline 与 kernel 访存/算力仿真              | ⬜   |
-| 9   | 推测解码（Speculative Decoding）            | Speculative proposer（EAGLE / MTP / n-gram）                 | 抢答 + 复核             | 接受率/加速比与高并发失效仿真                  | ⬜   |
-| 10  | 采样与结构化解码                           | Sampler + StructuredOutputManager / XGrammar                | 掷骰子 + 填表格模板     | 采样分布与语法掩码开销仿真                     | ⬜   |
-| 11  | 量化与低精度                               | AWQ / GPTQ / FP8 / NVFP4 + KV/激活量化                       | 压缩打包行李            | 精度-显存-吞吐权衡仿真                         | ⬜   |
-| 12  | 多模态推理                                 | Multimodal 输入处理 / VLM / mm cache                         | 多国语翻译入关          | 多模态 token 预算与预处理开销仿真             | ⬜   |
-| 13  | 多 LoRA / 适配器多租户                     | LoRA（S-LoRA / Punica）/ 适配器内存池                        | 同底盘换外壳            | 多适配器切换与内存池命中仿真                   | ⬜   |
-| 14  | 训练-推理一体化 / RL rollout               | Weight loading + 权重热更新 API                             | 边训边比赛换装备        | 权重热更新时延与 rollout 吞吐仿真            | ⬜   |
-| 15  | 可观测、benchmark 与 SLO 方法论            | Metrics / benchmark_serving                                 | 汽车仪表盘              | SLO 达成率与压测曲线复现                       | ⬜   |
+| #   | 篇目                                                   | 覆盖的框架模块                                        | 贯穿类比             | 无 GPU 实验                              | 状态 |
+| --- | ------------------------------------------------------ | ----------------------------------------------------- | -------------------- | ---------------------------------------- | ---- |
+| 1   | 从 Transformer 出发来看推理系统                        | 模块全景 / Engine 入口 / API Server                   | —                    | 前向计算与 KV 增长可视化                 | ✅   |
+| 2   | KV Cache 详解：PagedAttention 到 Prefix Caching        | KV Cache Manager / BlockPool / RadixAttention         | 图书馆借还书         | 分页/前缀命中率与碎片仿真                | ✅   |
+| 3   | 推理调度（单机篇）：Continuous Batching 到缓存感知调度 | Scheduler（单机 step 循环）                           | OS 的 CPU 调度       | 排队/批处理吞吐与时延仿真                | ✅   |
+| 4   | PD 分离：把 Prefill 和 Decode 拆到不同 GPU 池          | KVConnector / KV transfer                             | 工厂车间的专业化分工 | P/D 配比与传输开销仿真                   | ✅   |
+| 5   | 推理调度（分布式篇）：缓存感知路由到全局准入控制       | Router / 准入控制 / 扩缩容                            | 打车平台派单中心     | 缓存感知路由 / 亲和 vs 均衡 / 早拒绝仿真 | ✅   |
+| 6   | 大模型的各种并行：从张量切分到上下文并行               | Model Executor / TP·SP·PP·DP·CP·EP / EPLB·DeepEP      | 大厨团队的分工       | —                                        | 🚧   |
+| 7   | 推理模型（long-CoT）服务                               | 调度 + KV 生命周期在长思维链下的新负载                | 考场里的大考         | 长 CoT 下 KV 占用与 straggler 仿真       | ⬜   |
+| 8   | GPU 架构与现有 GPU（含 Attention Kernel）              | 硬件 / Roofline / Attention Kernels（FlashInfer/FA3） | GPU = 一座工厂       | Roofline 与 kernel 访存/算力仿真         | ⬜   |
+| 9   | 推测解码（Speculative Decoding）                       | Speculative proposer（EAGLE / MTP / n-gram）          | 抢答 + 复核          | 接受率/加速比与高并发失效仿真            | ⬜   |
+| 10  | 采样与结构化解码                                       | Sampler + StructuredOutputManager / XGrammar          | 掷骰子 + 填表格模板  | 采样分布与语法掩码开销仿真               | ⬜   |
+| 11  | 量化与低精度                                           | AWQ / GPTQ / FP8 / NVFP4 + KV/激活量化                | 压缩打包行李         | 精度-显存-吞吐权衡仿真                   | ⬜   |
+| 12  | 多模态推理                                             | Multimodal 输入处理 / VLM / mm cache                  | 多国语翻译入关       | 多模态 token 预算与预处理开销仿真        | ⬜   |
+| 13  | 多 LoRA / 适配器多租户                                 | LoRA（S-LoRA / Punica）/ 适配器内存池                 | 同底盘换外壳         | 多适配器切换与内存池命中仿真             | ⬜   |
+| 14  | 训练-推理一体化 / RL rollout                           | Weight loading + 权重热更新 API                       | 边训边比赛换装备     | 权重热更新时延与 rollout 吞吐仿真        | ⬜   |
+| 15  | 可观测、benchmark 与 SLO 方法论                        | Metrics / benchmark_serving                           | 汽车仪表盘           | SLO 达成率与压测曲线复现                 | ⬜   |
 
 ## 结构说明
 
@@ -43,24 +43,24 @@
 
 以 vLLM V1 与 SGLang 的实际模块划分为参照，核对系列覆盖情况；标注每个模块由哪一篇覆盖，`GAP` 表示原计划遗漏、后补入 9–15 的模块。
 
-| 框架模块（vLLM V1 / SGLang）                      | 覆盖篇目      | 备注                                   |
-| ------------------------------------------------- | ------------- | -------------------------------------- |
-| API Server（tokenize / mm load / streaming）      | 1             | Engine 入口全景                        |
-| Engine Core（busy loop / step）                   | 1、3          | 单机 step 循环在第 3 篇               |
-| Scheduler                                         | 3、5          | 单机 / 分布式两篇                     |
-| KVCacheManager / BlockPool / RadixCache           | 2             | —                                      |
-| KVConnector / KV transfer                         | 4             | PD 分离                                |
-| Router / 准入 / 扩缩容                            | 5             | 分布式篇                              |
-| Model Executor（TP·SP·PP·DP·CP·EP）                | 6             | 六刀并行 + MoE；CP 不再留给第 8 篇    |
-| Attention Kernels（FlashInfer / FA3）             | 8             | GAP → 并入 GPU 架构篇                 |
-| Speculative proposer（EAGLE / MTP / n-gram）      | 9             | GAP                                    |
-| Sampler                                           | 10            | GAP                                    |
-| StructuredOutputManager / XGrammar                | 10            | GAP                                    |
-| Quantization（AWQ/GPTQ/FP8/NVFP4）                | 11            | GAP                                    |
-| Multimodal 输入 / mm_receiver_cache               | 12            | GAP                                    |
-| LoRA（S-LoRA / Punica）                           | 13            | GAP                                    |
-| Weight loading / 权重热更新 API                   | 14            | GAP（RL rollout 权重同步）           |
-| Metrics / benchmark_serving                       | 15            | GAP（横切方法论）                     |
+| 框架模块（vLLM V1 / SGLang）                 | 覆盖篇目 | 备注                               |
+| -------------------------------------------- | -------- | ---------------------------------- |
+| API Server（tokenize / mm load / streaming） | 1        | Engine 入口全景                    |
+| Engine Core（busy loop / step）              | 1、3     | 单机 step 循环在第 3 篇            |
+| Scheduler                                    | 3、5     | 单机 / 分布式两篇                  |
+| KVCacheManager / BlockPool / RadixCache      | 2        | —                                  |
+| KVConnector / KV transfer                    | 4        | PD 分离                            |
+| Router / 准入 / 扩缩容                       | 5        | 分布式篇                           |
+| Model Executor（TP·SP·PP·DP·CP·EP）          | 6        | 六刀并行 + MoE；CP 不再留给第 8 篇 |
+| Attention Kernels（FlashInfer / FA3）        | 8        | GAP → 并入 GPU 架构篇              |
+| Speculative proposer（EAGLE / MTP / n-gram） | 9        | GAP                                |
+| Sampler                                      | 10       | GAP                                |
+| StructuredOutputManager / XGrammar           | 10       | GAP                                |
+| Quantization（AWQ/GPTQ/FP8/NVFP4）           | 11       | GAP                                |
+| Multimodal 输入 / mm_receiver_cache          | 12       | GAP                                |
+| LoRA（S-LoRA / Punica）                      | 13       | GAP                                |
+| Weight loading / 权重热更新 API              | 14       | GAP（RL rollout 权重同步）         |
+| Metrics / benchmark_serving                  | 15       | GAP（横切方法论）                  |
 
 ## 写作约定（每篇通用）
 

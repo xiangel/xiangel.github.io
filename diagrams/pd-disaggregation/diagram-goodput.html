@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Goodput vs load · Line chart</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --color-paper:#f5f5f5; }
+    body { background: var(--color-paper); }
+    .frame { width: 1000px; }
+    svg { width: 100%; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <svg viewBox="0 0 1000 560" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="gp-title gp-desc">
+      <title id="gp-title">Goodput, not raw throughput: disaggregation pushes the SLO knee out</title>
+      <desc id="gp-desc">Schematic goodput versus offered load. The colocated curve rises with load but hits its SLO knee early and then collapses as interference violates the latency SLOs. The disaggregated curve tracks the ideal line much further, reaching a higher peak and a knee pushed to the right before it saturates. A dashed diagonal marks the ideal where every request is served.</desc>
+      <defs>
+        <pattern id="gp-dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"/></pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+      <rect width="100%" height="100%" fill="url(#gp-dots)" opacity="0.55"/>
+
+      <!-- Heading -->
+      <text x="60" y="46" fill="#4f5d75" font-size="11" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.18em">GOODPUT VS 负载 · 示意</text>
+      <text x="60" y="78" fill="#2d3142" font-size="26" font-family="'Instrument Serif','Noto Serif CJK SC',serif">分离把 SLO 拐点往外推</text>
+      <text x="60" y="104" fill="#4f5d75" font-size="13" font-family="'Geist','Noto Sans CJK SC',sans-serif">Goodput = 同时满足 TTFT 和 TPOT SLO 的请求，不是原始吞吐。</text>
+
+      <!-- Y axis title -->
+      <text transform="rotate(-90 24 320)" x="24" y="320" fill="#4f5d75" font-size="7" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.14em" text-anchor="middle">GOODPUT（SLO 内）</text>
+
+      <!-- Gridlines -->
+      <line x1="80" y1="422" x2="960" y2="422" stroke="rgba(45,49,66,0.08)" stroke-width="0.8"/>
+      <line x1="80" y1="354" x2="960" y2="354" stroke="rgba(45,49,66,0.08)" stroke-width="0.8"/>
+      <line x1="80" y1="286" x2="960" y2="286" stroke="rgba(45,49,66,0.08)" stroke-width="0.8"/>
+      <line x1="80" y1="218" x2="960" y2="218" stroke="rgba(45,49,66,0.08)" stroke-width="0.8"/>
+      <line x1="80" y1="150" x2="960" y2="150" stroke="rgba(45,49,66,0.06)" stroke-width="0.8"/>
+      <line x1="80" y1="150" x2="80" y2="490" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
+      <line x1="80" y1="490" x2="960" y2="490" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
+
+      <!-- Y tick labels (unitless index) -->
+      <text x="72" y="493" fill="#4f5d75" font-size="8" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="end">0</text>
+      <text x="72" y="425" fill="#4f5d75" font-size="8" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="end">2</text>
+      <text x="72" y="357" fill="#4f5d75" font-size="8" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="end">4</text>
+      <text x="72" y="289" fill="#4f5d75" font-size="8" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="end">6</text>
+      <text x="72" y="221" fill="#4f5d75" font-size="8" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="end">8</text>
+      <text x="72" y="153" fill="#4f5d75" font-size="8" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="end">10</text>
+
+      <!-- knee guides -->
+      <line x1="362" y1="381" x2="362" y2="490" stroke="#4f5d75" stroke-width="1" stroke-dasharray="3,3" opacity="0.6"/>
+      <line x1="661" y1="266" x2="661" y2="490" stroke="#eb6c36" stroke-width="1" stroke-dasharray="3,3" opacity="0.7"/>
+
+      <!-- ideal reference -->
+      <polyline points="80,490 960,150" fill="none" stroke="#2d3142" stroke-width="1" stroke-dasharray="5,4" opacity="0.45"/>
+      <text x="905" y="150" fill="#2d3142" font-size="9" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="end" opacity="0.6">理想</text>
+
+      <!-- colocated (muted) -->
+      <polyline points="80,490 362,381 714,490 960,490" fill="none" stroke="#4f5d75" stroke-width="1.4" stroke-linejoin="round"/>
+
+      <!-- disaggregated (focal accent) area + line -->
+      <polygon points="80,490 661,266 960,358 960,490 80,490" fill="rgba(235,108,54,0.06)"/>
+      <polyline points="80,490 661,266 960,358" fill="none" stroke="#eb6c36" stroke-width="1.8" stroke-linejoin="round"/>
+      <circle cx="80" cy="490" r="4" fill="#eb6c36"/>
+      <circle cx="661" cy="266" r="4" fill="#eb6c36"/>
+      <circle cx="960" cy="358" r="4" fill="#eb6c36"/>
+
+      <!-- knee labels -->
+      <text x="362" y="373" fill="#4f5d75" font-size="9" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">拐点（colocated）</text>
+      <text x="661" y="258" fill="#eb6c36" font-size="9" font-family="'Geist Mono','Noto Sans CJK SC',monospace" text-anchor="middle">拐点被推到右边</text>
+
+      <!-- X axis label -->
+      <text x="520" y="516" fill="#4f5d75" font-size="9" font-family="'Geist Mono','Noto Sans CJK SC',monospace" letter-spacing="0.14em" text-anchor="middle">到达负载（请求 / 秒） →</text>
+
+      <!-- Legend -->
+      <line x1="60" y1="530" x2="960" y2="530" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+      <line x1="60" y1="548" x2="84" y2="548" stroke="#eb6c36" stroke-width="1.8"/>
+      <circle cx="72" cy="548" r="4" fill="#eb6c36"/>
+      <text x="92" y="552" fill="#4f5d75" font-size="9" font-family="'Geist','Noto Sans CJK SC',sans-serif">分离 · 焦点</text>
+      <line x1="270" y1="548" x2="294" y2="548" stroke="#4f5d75" stroke-width="1.4"/>
+      <text x="302" y="552" fill="#4f5d75" font-size="9" font-family="'Geist','Noto Sans CJK SC',sans-serif">colocated（互相干扰）</text>
+      <line x1="500" y1="548" x2="524" y2="548" stroke="#2d3142" stroke-width="1" stroke-dasharray="5,4" opacity="0.6"/>
+      <text x="532" y="552" fill="#4f5d75" font-size="9" font-family="'Geist','Noto Sans CJK SC',sans-serif">理想（全部服务）</text>
+    </svg>
+  </div>
+</body>
+</html>
